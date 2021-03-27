@@ -2,6 +2,8 @@ import numpy as np
 from scipy.integrate import odeint
 
 # First attempts to implement the model by Mannella et al.
+# Is it correct to start like this or is there a better way?
+# How to implement the excitatory/inhibitory units? How to implement the learning process?
 
 
 def pos_sat(x):
@@ -62,18 +64,31 @@ class Unit:
                        in self.input_units if input_unit.type != "dopaminergic"])
 
 
-# Initialize some units
+# Initialize some units (Goal loop)
 units = {}
-units["LH"] = Unit("leaky onset", tau=100,tau_i=500)
+units["CSa"] = Unit("leaky onset", tau=500, tau_i=500)
+units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
+units["USa"] = Unit("leaky onset", tau=500, tau_i=500)
+units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
+units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
 units["VTA"] = Unit("dopaminergic", iota=0.8, delta=4)
 units["NAc_1"] = Unit("leaky")
 units["NAc_2"] = Unit("leaky")
+units["STNv_1"] = Unit("leaky")
+units["STNv_2"] = Unit("leaky")
+units["SNpr_1"] = Unit("leaky")
+units["SNpr_2"] = Unit("leaky")
+units["DM_1"] = Unit("leaky")
+units["DM_2"] = Unit("leaky")
+units["PL_1"] = Unit("leaky", tau=2000, sigma=20, theta=0.8)
+units["PL_2"] = Unit("leaky", tau=2000, sigma=20, theta=0.8)
 
-# Connect them
+
+# Connect some
 units["VTA"].add_input_unit(units["LH"],1)
-units["NAc_1"].add_input_unit(units["VTA"])
-units["NAc_2"].add_input_unit(units["VTA"])
-units["LH"].add_input_unit(units["NAc_1"],1)
+units["LH"].add_input_unit(units["CSa"],1)
+units["CSa"].add_input_unit(units["CSb"],1)
+
 
 # Function to run the model
 def run_model(t_max, dt):
