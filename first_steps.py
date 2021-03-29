@@ -1,9 +1,9 @@
 import numpy as np
-from scipy.integrate import odeint
+import matplotlib.pyplot as plt
 
-# First attempts to implement the model by Mannella et al.
-# Is it correct to start like this or is there a better way?
-# How to implement the excitatory/inhibitory units? How to implement the learning process?
+# Next steps: Integrate trace and learning
+# Connect all neurons
+# Visualize behaviour better 
 
 
 def pos_sat(x):
@@ -23,6 +23,7 @@ class Unit:
         self.tau = tau  # Define the time constant of the unit
         self.thres = thres  # Define the steepness of the hyperbolic function for the unit activation
         self.sigma = sigma  # Define the activation threshold
+        self.activity_history = []  # Initalize an array that stores the potential and firing rate at each point in time
 
         # Define the time constant and the initial potential for the inhibitory population of leaky onset units
         if type == "leaky onset":
@@ -34,14 +35,14 @@ class Unit:
             self.dopa_in = dopa_in
             self.dopa_de = dopa_de
 
-    # Add a new input unit with a specific weight
-    def add_input_unit(self, input_unit, input_weight=1):
-        self.input_units.append([input_unit, input_weight])
+    # Add a new input units with a specific weight
+    def add_input_units(self, input_units_and_weights):
+        self.input_units.extend(input_units_and_weights)
 
     # Update the potential of the unit
-    def integrate(self, dt=1):
+    def integrate(self, dt):
 
-        if self.type == "leaky":
+        if self.type == "leaky" or self.type == "dopaminergic":
             potential_change = (-self.potential + self.get_input_weight() * self.input()) / self.tau
             self.potential = self.potential + potential_change * dt
 
@@ -76,46 +77,62 @@ class Unit:
     def switch_activation_binary_units(self):
         self.firing_rate = 1 if self.firing_rate == 0 else 0
 
-    # Update the potential of the model and compute its firing rate, return the values
+    # Update the potential of the model and compute its firing rate, save the values
     def activity(self, dt=1):
         self.integrate(dt=dt)
         self.update_firing_rate()
-        return self.potential, self.firing_rate
+        self.activity_history.append([self.potential, self.firing_rate])
 
 
-# Initialize some units (Goal loop)
-units = {}
-units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary"); units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
-units["CSa"] = Unit("leaky onset", tau=500, tau_i=500); units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
-units["USa"] = Unit("leaky onset", tau=500, tau_i=500); units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
-units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
-units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
-units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
-units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
-units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-units["DM_1"] = Unit("leaky"); units["DM_2"] = Unit("leaky")
-#nits["PL_1"] = Unit("leaky", tau=2000, sigma=20, theta=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, theta=0.8)
+def check_units():
+    """Create a binary, leaky and leaky onset unit to check whether they behave as expected
+    Turn the binary unit on and off and plot the firing rates"""
 
+    units = {}
+    units["Binary"] = Unit("binary"); units["Binary"].switch_activation_binary_units()
+    units["Leaky"] = Unit("leaky"); units["Dopaminergic"] = Unit("dopaminergic")
+    units["Leaky Onset"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["Leaky"].add_input_units([[units["Binary"], 1]]); units["Dopaminergic"].add_input_units([[units["Binary"], 1]])
+    units["Leaky Onset"].add_input_units([[units["Binary"], 1]])
 
-# Connect some
-units["CSa"].add_input_unit(units["FoodA"],1)
-units["CSb"].add_input_unit(units["SatA"],-1)
-units["NAc_1"].add_input_unit(units["FoodA"],1)
-units["NAc_2"].add_input_unit(units["SatA"],-1)
-
-# Switch Food and saturation to 1 for testing
-units["FoodA"].update_firing_rate()
-units["SatA"].update_firing_rate()
-
-# Function to run the model
-def run_model(t_max, dt):
-    t = np.arange(0, t_max, dt)
-    firing_rates = np.zeros((len(units), len(t)))
+    t = np.arange(0, 10000, 1)
     for i_t in range(1, len(t)):
-        for i_u,unit in enumerate(units.values()):
-            [potential, firing_rate] = unit.activity(dt)
-            firing_rates[i_u, i_t] = firing_rate
-    return firing_rates
+        if i_t == len(t) / 2:  # Switch food off again to check w
+            units["Binary"].switch_activation_binary_units()
+        for i_u, unit in enumerate(units.values()):
+            unit.activity(1)
 
-test = run_model(100,1)
-print("test")
+    plt.figure()
+    for i_u, (name, unit) in enumerate(units.items()):
+        firing_rate = np.array(unit.activity_history)[:,1]
+        plt.subplot(len(units), 1, i_u+1)
+        plt.plot(firing_rate)
+        plt.title(name, fontsize=7)
+        plt.ylabel("Firing rate", fontsize=5)
+        plt.yticks(fontsize=5)
+        plt.xticks(fontsize=5)
+    plt.subplots_adjust(hspace=1)
+    plt.show()
+
+check_units()
+
+def build_and_connect_model_units():
+
+    # Initialize the units of the model (start with the goal loop)
+    units = {}
+    units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary"); units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
+    units["CSa"] = Unit("leaky onset", tau=500, tau_i=500); units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["USa"] = Unit("leaky onset", tau=500, tau_i=500); units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["LH"] = Unit("leaky onset", tau=100, tau_i=500); units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
+    units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
+    units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
+    units["DM_1"] = Unit("leaky"); units["DM_2"] = Unit("leaky")
+    units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
+
+    # Connect the units
+    #units["CSa"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
+    #units["CSb"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
+    units["NAc_1"].add_input_units([[units["FoodA"],1]])
+    units["CSa"].add_input_units([[units["FoodA"],1]])
+    units["NAc_2"].add_input_units([[units["SatA"],-1]])
