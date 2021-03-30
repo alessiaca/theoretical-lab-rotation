@@ -3,44 +3,70 @@ import matplotlib.pyplot as plt
 
 # Next steps: Integrate trace and learning
 # Connect all neurons
-# Visualize behaviour better 
+# Visualize behaviour better
+# class for connections?
 
 
 def pos_sat(x):
     """"Returns 0 if x <= 0, else x"""
     return np.max([x,0])
+def neg_sat(x):
+    """"Returns 0 if x >= 0, else x"""
+    return np.min([x,0])
 
 
 class Unit:
     """Class for the units in the model"""
 
     # Initialize the unit
-    def __init__(self, type, tau=300, thres=0, sigma=1, potential_0=0, tau_i=None, potential_i_0=0, dopa_de=None, dopa_in=None):
+    def __init__(self, type, tau=300, thres=0, sigma=1, potential_0=0, tau_i=None, potential_i_0=0, dopa_de=None,
+                 dopa_in=None):
         self.type = type  # Define the type of the unit: "leaky","leaky onset", "binary" or "dopaminergic"
-        self.input_units = []  # Initialize an empty list of input units
+        self.connections = []  # Initialize an empty list of input units
         self.potential = potential_0 # Initialize the potential of the unit
         self.firing_rate = 0
+        self.trace = 0
         self.tau = tau  # Define the time constant of the unit
         self.thres = thres  # Define the steepness of the hyperbolic function for the unit activation
         self.sigma = sigma  # Define the activation threshold
-        self.activity_history = []  # Initalize an array that stores the potential and firing rate at each point in time
+        self.activity_history = []  # Initialize an array that stores the potential and firing rate at each point in time
+        self.tau_i = tau_i
+        self.potential_i = potential_i_0
+        self.dopa_in = dopa_in
+        self.dopa_de = dopa_de
+        self.tau_trace = 500
+        self.alpha = 10**10
+        self.thres_da_bla = 0.7
+        self.max_w_bla = 2
+        self.eta_bla = 0.08
 
-        # Define the time constant and the initial potential for the inhibitory population of leaky onset units
-        if type == "leaky onset":
-            self.tau_i = tau_i
-            self.potential_i = potential_i_0
 
-        # Define the parameters weighting the input dependent and independent of dopamine for a dopaminergic unit
-        if type == "dopaminergic":
-            self.dopa_in = dopa_in
-            self.dopa_de = dopa_de
+    # Define a subclass for connections a neuron can have
+    class Connection:
+        def __init__(self,input_unit, weight):
+            self.input_unit = input_unit
+            self.weight = weight
 
-    # Add a new input units with a specific weight
-    def add_input_units(self, input_units_and_weights):
-        self.input_units.extend(input_units_and_weights)
+    # Add new connections: List fo input units and connection weight
+    def add_input_units(self, connections):
+        for input_unit, weight in connections:
+            self.connections.append(self.Connection(input_unit, weight))
 
-    # Update the potential of the unit
+    # Update the trace, weights and potential of the unit
     def integrate(self, dt):
+
+        # Update the trace
+        trace_change = ((-self.trace + self.alpha * self.firing_rate) / self.tau_trace)
+        self.trace = self.trace + trace_change * dt
+
+        # Update the weights (if the unit receives dopaminergic input)
+        dopa_input_unit = self.get_dopa_input_unit()
+        if dopa_input_unit:
+            for connection in self.connections:
+                weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
+                                pos_sat(self.trace) * neg_sat(connection.input_unit.trace) * (self.max_w_bla - connection.weight)
+                self.connection.weight = self.connection.weight * weight_change * dt
+
 
         if self.type == "leaky" or self.type == "dopaminergic":
             potential_change = (-self.potential + self.get_input_weight() * self.input()) / self.tau
@@ -52,12 +78,20 @@ class Unit:
             self.potential = self.potential + potential_change * dt
             self.potential_i = self.potential_i + potential_i_change * dt
 
+    # Return the dopaminergic input unit if there is one, else none
+    def get_dopa_input_unit(self):
+        dopa_input_unit = [connection.input_unit for connection in self.connections
+                           if connection.input_unit.type == "dopaminergic"]
+        if dopa_input_unit:
+            return dopa_input_unit[0]
+        else:
+            return None
+
     # Get the weight of the input (dependent on dopaminergic input units)
     def get_input_weight(self):
         # Check if the unit is connected to a dopaminergic unit
-        dopa_input_unit = [unit[0] for unit in self.input_units if unit[0].type == "dopaminergic"]
+        dopa_input_unit = self.get_dopa_input_unit()
         if dopa_input_unit:
-            dopa_input_unit = dopa_input_unit[0]
             input_weight = dopa_input_unit.dopa_in + dopa_input_unit.dopa_de * dopa_input_unit.firing_rate
         else:
             input_weight = 1
@@ -70,8 +104,8 @@ class Unit:
 
     # Compute the input to the unit given the input units and connection weights
     def input(self):
-        return np.sum([input_unit.firing_rate * input_weight for input_unit, input_weight
-                       in self.input_units if input_unit.type != "dopaminergic"])
+        return np.sum([connection.input_unit.firing_rate * connection.weight for connection
+                       in self.connections if connection.input_unit.type != "dopaminergic"])
 
     # Switch the binary units of and on
     def switch_activation_binary_units(self):
@@ -81,7 +115,7 @@ class Unit:
     def activity(self, dt=1):
         self.integrate(dt=dt)
         self.update_firing_rate()
-        self.activity_history.append([self.potential, self.firing_rate])
+        self.activity_history.append([self.potential, self.firing_rate, self.trace])
 
 
 def check_units():
@@ -103,14 +137,16 @@ def check_units():
             unit.activity(1)
 
     plt.figure()
+    subplots = np.arange(len(units)*3).reshape(len(units),3) + 1
+    titles = ["Potential","Firing rate", "Trace"]
     for i_u, (name, unit) in enumerate(units.items()):
-        firing_rate = np.array(unit.activity_history)[:,1]
-        plt.subplot(len(units), 1, i_u+1)
-        plt.plot(firing_rate)
-        plt.title(name, fontsize=7)
-        plt.ylabel("Firing rate", fontsize=5)
-        plt.yticks(fontsize=5)
-        plt.xticks(fontsize=5)
+        activity = np.array(unit.activity_history)
+        for i,title in enumerate(titles):
+            plt.subplot(len(units), 3, subplots[i_u,i]); plt.plot(activity[:,i])
+            plt.title(name, fontsize=7)
+            plt.ylabel(title, fontsize=5)
+            plt.yticks(fontsize=5)
+            plt.xticks(fontsize=5)
     plt.subplots_adjust(hspace=1)
     plt.show()
 
@@ -131,8 +167,10 @@ def build_and_connect_model_units():
     units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
 
     # Connect the units
-    #units["CSa"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
-    #units["CSb"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
-    units["NAc_1"].add_input_units([[units["FoodA"],1]])
-    units["CSa"].add_input_units([[units["FoodA"],1]])
-    units["NAc_2"].add_input_units([[units["SatA"],-1]])
+    # units["CSa"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],...
+    #                               [units["CSb"], 1], [units["F"], 1], [units["SatA"], -1], [units["SatB"], -1]])
+    # units["CSb"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
+    # units["LH"].add_input_units([[units["FoodA"], 1]])
+    # units["NAc_1"].add_input_units([[units["FoodA"],1]])
+    # units["CSa"].add_input_units([[units["FoodA"],1]])
+    # units["NAc_2"].add_input_units([[units["SatA"],-1]])
