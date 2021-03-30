@@ -48,7 +48,7 @@ class Unit:
             self.weight = weight
 
     # Add new connections: List fo input units and connection weight
-    def add_input_units(self, connections):
+    def add_connections(self, connections):
         for input_unit, weight in connections:
             self.connections.append(self.Connection(input_unit, weight))
 
@@ -126,8 +126,8 @@ def check_units():
     units["Binary"] = Unit("binary"); units["Binary"].switch_activation_binary_units()
     units["Leaky"] = Unit("leaky"); units["Dopaminergic"] = Unit("dopaminergic")
     units["Leaky Onset"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["Leaky"].add_input_units([[units["Binary"], 1]]); units["Dopaminergic"].add_input_units([[units["Binary"], 1]])
-    units["Leaky Onset"].add_input_units([[units["Binary"], 1]])
+    units["Leaky"].add_connections([[units["Binary"], 1]]); units["Dopaminergic"].add_connections([[units["Binary"], 1]])
+    units["Leaky Onset"].add_connections([[units["Binary"], 1]])
 
     t = np.arange(0, 10000, 1)
     for i_t in range(1, len(t)):
@@ -150,16 +150,19 @@ def check_units():
     plt.subplots_adjust(hspace=1)
     plt.show()
 
-check_units()
+#check_units()
 
 def build_and_connect_model_units():
 
     # Initialize the units of the model (start with the goal loop)
     units = {}
-    units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary"); units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
+    units["Lever"] = Unit("binary")
+    units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary")
+    units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
     units["CSa"] = Unit("leaky onset", tau=500, tau_i=500); units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
     units["USa"] = Unit("leaky onset", tau=500, tau_i=500); units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["LH"] = Unit("leaky onset", tau=100, tau_i=500); units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
+    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
@@ -167,10 +170,25 @@ def build_and_connect_model_units():
     units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
 
     # Connect the units
-    # units["CSa"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],...
-    #                               [units["CSb"], 1], [units["F"], 1], [units["SatA"], -1], [units["SatB"], -1]])
-    # units["CSb"].add_input_units([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1]])
-    # units["LH"].add_input_units([[units["FoodA"], 1]])
-    # units["NAc_1"].add_input_units([[units["FoodA"],1]])
-    # units["CSa"].add_input_units([[units["FoodA"],1]])
-    # units["NAc_2"].add_input_units([[units["SatA"],-1]])
+    # BLA units connected to themselves?
+    units["CSa"].add_connections([[units["Lever"], 1], [units["CSb"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
+    units["CSb"].add_connections([[units["Lever"], 1], [units["CSa"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
+    units["USa"].add_connections([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],
+                                 [units["CSa"], 0], [units["CSb"], 0], [units["USb"], 0], [units["VTA"], 1]])
+    units["USb"].add_connections([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],
+                                 [units["CSa"], 0], [units["CSb"], 0], [units["USa"], 0], [units["VTA"], 1]])
+    units["LH"].add_connections([[units["USa"], 5], [units["USb"], 5]])
+    units["VTA"].add_connections([[units["LH"], 20]])
+    units["NAc_1"].add_connections([[units["VTA"], 1], [units["USa"], 0], [units["USb"], 0], [units["PL_1"], 1]])
+    units["NAc_2"].add_connections([[units["VTA"], 1], [units["USa"], 0], [units["USb"], 0], [units["PL_2"], 1]])
+    units["STNv_1"].add_connections([[units["PL_1"], 1]])
+    units["STNv_2"].add_connections([[units["PL_2"], 1]])
+    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], -2], [units["STNv_2"], -2]])
+    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], -2], [units["STNv_2"], -2]])
+    units["DM_1"].add_connections([[units["SNpr_1"], 1], [units["DM_1"], 1], [units["DM_2"], -0.8]])
+    units["DM_2"].add_connections([[units["SNpr_2"], 1],  [units["DM_1"], -0.8], [units["DM_2"], 1]])
+    units["PL_1"].add_connections([[units["DM_1"], 1]])
+    units["PL_2"].add_connections([[units["DM_2"], 1]])
+
+build_and_connect_model_units()
+print("hu")
