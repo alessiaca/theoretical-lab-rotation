@@ -1,10 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Next steps: Integrate trace and learning
-# Connect all neurons
-# Visualize behaviour better
-# class for connections?
+# Next steps:
+# Get to work the instrumental learning 
+
 
 
 def pos_sat(x):
@@ -39,6 +38,7 @@ class Unit:
         self.thres_da_bla = 0.7
         self.max_w_bla = 2
         self.eta_bla = 0.08
+        self.trace_change = 0
 
 
     # Define a subclass for connections a neuron can have
@@ -46,6 +46,10 @@ class Unit:
         def __init__(self,input_unit, weight):
             self.input_unit = input_unit
             self.weight = weight
+            self.weight_history = []
+            self.type = "fixed"
+            if weight == 0:
+                self.type = "plastic"
 
     # Add new connections: List fo input units and connection weight
     def add_connections(self, connections):
@@ -56,16 +60,21 @@ class Unit:
     def integrate(self, dt):
 
         # Update the trace
-        trace_change = ((-self.trace + self.alpha * self.firing_rate) / self.tau_trace)
-        self.trace = self.trace + trace_change * dt
+        self.trace_change = ((-self.trace + self.alpha * self.firing_rate) / self.tau_trace)
+        self.trace = self.trace + self.trace_change * dt
 
         # Update the weights (if the unit receives dopaminergic input)
         dopa_input_unit = self.get_dopa_input_unit()
         if dopa_input_unit:
             for connection in self.connections:
-                weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
-                                pos_sat(self.trace) * neg_sat(connection.input_unit.trace) * (self.max_w_bla - connection.weight)
-                self.connection.weight = self.connection.weight * weight_change * dt
+                # Update only the connections to non-binary units
+                if connection.type == "plastic":
+                    weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
+                                    pos_sat(self.trace_change) * neg_sat(connection.input_unit.trace_change) * \
+                                    (self.max_w_bla - connection.weight)
+                    connection.weight = connection.weight + weight_change * dt
+                    # Save the connection weight in an array
+                    connection.weight_history.append(connection.weight)
 
 
         if self.type == "leaky" or self.type == "dopaminergic":
@@ -131,7 +140,7 @@ def check_units():
 
     t = np.arange(0, 10000, 1)
     for i_t in range(1, len(t)):
-        if i_t == len(t) / 2:  # Switch food off again to check w
+        if i_t == len(t) / 2:  # Switch food off again
             units["Binary"].switch_activation_binary_units()
         for i_u, unit in enumerate(units.values()):
             unit.activity(1)
@@ -171,13 +180,13 @@ def build_and_connect_model_units():
 
     # Connect the units
     # BLA units connected to themselves?
-    units["CSa"].add_connections([[units["Lever"], 1], [units["CSb"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
-    units["CSb"].add_connections([[units["Lever"], 1], [units["CSa"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
-    units["USa"].add_connections([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],
+    units["CSa"].add_connections([[units["Lever"], 5], [units["CSb"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
+    units["CSb"].add_connections([[units["Lever"], 5], [units["CSa"], 0], [units["USa"], 0], [units["USb"], 0], [units["VTA"], 1]])
+    units["USa"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10],
                                  [units["CSa"], 0], [units["CSb"], 0], [units["USb"], 0], [units["VTA"], 1]])
-    units["USb"].add_connections([[units["FoodA"], 1], [units["FoodB"], 1], [units["SatA"], -1], [units["SatB"], -1],
+    units["USb"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10],
                                  [units["CSa"], 0], [units["CSb"], 0], [units["USa"], 0], [units["VTA"], 1]])
-    units["LH"].add_connections([[units["USa"], 5], [units["USb"], 5]])
+    units["LH"].add_connections([[units["FoodA"], 10], [units["FoodB"], 5], [units["USa"], 5], [units["USb"], 5]])
     units["VTA"].add_connections([[units["LH"], 20]])
     units["NAc_1"].add_connections([[units["VTA"], 1], [units["USa"], 0], [units["USb"], 0], [units["PL_1"], 1]])
     units["NAc_2"].add_connections([[units["VTA"], 1], [units["USa"], 0], [units["USb"], 0], [units["PL_2"], 1]])
@@ -190,5 +199,44 @@ def build_and_connect_model_units():
     units["PL_1"].add_connections([[units["DM_1"], 1]])
     units["PL_2"].add_connections([[units["DM_2"], 1]])
 
-build_and_connect_model_units()
+    return units
+
+# Test with only one stimulus if the lever gets associated with the food (weights update as expected)
+def test_instrumental_training():
+
+    # Define the units needed
+    units = {}
+    units["Lever"] = Unit("binary")
+    units["Food"] = Unit("binary")
+    units["CS"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["US"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
+    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    # Connect them
+    units["CS"].add_connections([[units["Lever"], 5], [units["US"], 0], [units["VTA"], 1]])
+    units["US"].add_connections([[units["Food"], 5], [units["CS"], 0], [units["VTA"], 1]])
+    units["LH"].add_connections([[units["Food"], 10], [units["US"], 5]])
+    units["VTA"].add_connections([[units["LH"], 20]])
+
+    # Run the model
+    t = np.arange(0, 10000, 1)
+    lever_on_switches = np.linspace(0,len(t),100,dtype=int)
+    food_on_switches = lever_on_switches + 10
+    for i_t in range(len(t)):
+        if i_t in lever_on_switches:  # Switch food off again
+            units["Lever"].switch_activation_binary_units()
+        elif i_t in lever_on_switches+5:
+            units["Lever"].switch_activation_binary_units()
+        if i_t in food_on_switches:  # Switch food off again
+            units["Food"].switch_activation_binary_units()
+        elif i_t in food_on_switches + 5:
+            units["Food"].switch_activation_binary_units()
+        for i_u, unit in enumerate(units.values()):
+            unit.activity(1)
+
+    # Plot the behaviour
+    plt.plot(np.array(units["Lever"].activity_history)[:,1])
+    plt.show()
+
+test_instrumental_training()
 print("hu")
