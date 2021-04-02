@@ -2,16 +2,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Next steps:
-# Get to work the instrumental learning 
-
-
+# Get to work the instrumental learning
+# Run the functions at the bottom to test the code
+# It seems to work with alpha=10 but not with alpha=10**10. Where is the error?
 
 def pos_sat(x):
     """"Returns 0 if x <= 0, else x"""
     return np.max([x,0])
 def neg_sat(x):
-    """"Returns 0 if x >= 0, else x"""
-    return np.min([x,0])
+    """"Returns 0 if x >= 0, else -x"""
+    return np.max([x*-1,0])
 
 
 class Unit:
@@ -25,6 +25,7 @@ class Unit:
         self.potential = potential_0 # Initialize the potential of the unit
         self.firing_rate = 0
         self.trace = 0
+        self.trace_change = 0
         self.tau = tau  # Define the time constant of the unit
         self.thres = thres  # Define the steepness of the hyperbolic function for the unit activation
         self.sigma = sigma  # Define the activation threshold
@@ -33,12 +34,12 @@ class Unit:
         self.potential_i = potential_i_0
         self.dopa_in = dopa_in
         self.dopa_de = dopa_de
+        # Hardcode these values for now as they are equal for all units
         self.tau_trace = 500
-        self.alpha = 10**10
+        self.alpha = 10#**10 # Why doesn't it work if alpha is 10**10??
         self.thres_da_bla = 0.7
         self.max_w_bla = 2
         self.eta_bla = 0.08
-        self.trace_change = 0
 
 
     # Define a subclass for connections a neuron can have
@@ -51,23 +52,34 @@ class Unit:
             if weight == 0:
                 self.type = "plastic"
 
-    # Add new connections: List fo input units and connection weight
+    # Add new connections: List of input units and connection weights
     def add_connections(self, connections):
         for input_unit, weight in connections:
+            # Create a new class instance for each connection
             self.connections.append(self.Connection(input_unit, weight))
 
-    # Update the trace, weights and potential of the unit
+    # Update the potential, trace and weights
     def integrate(self, dt):
 
-        # Update the trace
+        # Update the potential
+        if self.type == "leaky" or self.type == "dopaminergic":
+            potential_change = (-self.potential + self.get_input_weight() * self.input()) / self.tau
+            self.potential = self.potential + potential_change * dt
+        elif self.type == "leaky onset":
+            potential_change = (-self.potential + pos_sat(self.input() - self.potential_i)) / self.tau
+            potential_i_change = (-self.potential_i + self.input()) / self.tau_i
+            self.potential = self.potential + potential_change * dt
+            self.potential_i = self.potential_i + potential_i_change * dt
+
+        # Update the trace - only needed for BLA units, but done for all due to simplicity
         self.trace_change = ((-self.trace + self.alpha * self.firing_rate) / self.tau_trace)
         self.trace = self.trace + self.trace_change * dt
 
-        # Update the weights (if the unit receives dopaminergic input)
+        # Update the weights - only for units that receive dopaminergic input
         dopa_input_unit = self.get_dopa_input_unit()
         if dopa_input_unit:
             for connection in self.connections:
-                # Update only the connections to non-binary units
+                # Update only plastic connections
                 if connection.type == "plastic":
                     weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
                                     pos_sat(self.trace_change) * neg_sat(connection.input_unit.trace_change) * \
@@ -75,17 +87,6 @@ class Unit:
                     connection.weight = connection.weight + weight_change * dt
                     # Save the connection weight in an array
                     connection.weight_history.append(connection.weight)
-
-
-        if self.type == "leaky" or self.type == "dopaminergic":
-            potential_change = (-self.potential + self.get_input_weight() * self.input()) / self.tau
-            self.potential = self.potential + potential_change * dt
-
-        elif self.type == "leaky onset":
-            potential_change = (-self.potential + pos_sat(self.input() - self.potential_i)) / self.tau
-            potential_i_change = (-self.potential_i + self.input()) / self.tau_i
-            self.potential = self.potential + potential_change * dt
-            self.potential_i = self.potential_i + potential_i_change * dt
 
     # Return the dopaminergic input unit if there is one, else none
     def get_dopa_input_unit(self):
@@ -121,7 +122,7 @@ class Unit:
         self.firing_rate = 1 if self.firing_rate == 0 else 0
 
     # Update the potential of the model and compute its firing rate, save the values
-    def activity(self, dt=1):
+    def activity(self, dt):
         self.integrate(dt=dt)
         self.update_firing_rate()
         self.activity_history.append([self.potential, self.firing_rate, self.trace])
@@ -159,7 +160,6 @@ def check_units():
     plt.subplots_adjust(hspace=1)
     plt.show()
 
-#check_units()
 
 def build_and_connect_model_units():
 
@@ -201,6 +201,7 @@ def build_and_connect_model_units():
 
     return units
 
+
 # Test with only one stimulus if the lever gets associated with the food (weights update as expected)
 def test_instrumental_training():
 
@@ -214,29 +215,49 @@ def test_instrumental_training():
     units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
     # Connect them
     units["CS"].add_connections([[units["Lever"], 5], [units["US"], 0], [units["VTA"], 1]])
-    units["US"].add_connections([[units["Food"], 5], [units["CS"], 0], [units["VTA"], 1]])
+    units["US"].add_connections([[units["Food"], 5], [units["CS"], 0], [units["VTA"], 1]]) # Why deosn't it work that way!
     units["LH"].add_connections([[units["Food"], 10], [units["US"], 5]])
     units["VTA"].add_connections([[units["LH"], 20]])
 
     # Run the model
-    t = np.arange(0, 10000, 1)
-    lever_on_switches = np.linspace(0,len(t),100,dtype=int)
-    food_on_switches = lever_on_switches + 10
+    t = np.arange(0, 100000, 1)
+    lever_on_switches = np.linspace(0,len(t), 4,dtype=int)
+    food_on_switches = lever_on_switches + 5000
     for i_t in range(len(t)):
         if i_t in lever_on_switches:  # Switch food off again
             units["Lever"].switch_activation_binary_units()
-        elif i_t in lever_on_switches+5:
+        elif i_t in lever_on_switches+10000:
             units["Lever"].switch_activation_binary_units()
         if i_t in food_on_switches:  # Switch food off again
             units["Food"].switch_activation_binary_units()
-        elif i_t in food_on_switches + 5:
+        elif i_t in food_on_switches + 10000:
             units["Food"].switch_activation_binary_units()
         for i_u, unit in enumerate(units.values()):
             unit.activity(1)
 
     # Plot the behaviour
-    plt.plot(np.array(units["Lever"].activity_history)[:,1])
-    plt.show()
+    plt.figure()
+    subplots = np.arange(len(units) * 3).reshape(len(units), 3) + 1
+    titles = ["Potential", "Firing rate", "Trace"]
+    for i_u, (name, unit) in enumerate(units.items()):
+        activity = np.array(unit.activity_history)
+        for i, title in enumerate(titles):
+            plt.subplot(len(units), 3, subplots[i_u, i])
+            plt.plot(activity[:, i])
+            plt.title(name, fontsize=7)
+            plt.ylabel(title, fontsize=5)
+            plt.yticks(fontsize=5)
+            plt.xticks(fontsize=5)
+    plt.subplots_adjust(hspace=1)
 
+    # Plot th weights from CS(Lever) to US(Food) (should increase)
+    plt.figure()
+    weights = units["US"].connections[1].weight_history
+    plt.plot(weights)
+    plt.title("Weights from CS to US")
+    plt.show()
+    print("debug")
+    
+# Run the functions of interest
 test_instrumental_training()
-print("hu")
+check_units()
