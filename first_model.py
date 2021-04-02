@@ -19,7 +19,7 @@ class Unit:
 
     # Initialize the unit
     def __init__(self, type, tau=300, thres=0, sigma=1, potential_0=0, tau_i=None, potential_i_0=0, dopa_de=None,
-                 dopa_in=None):
+                 dopa_in=None, noise_coeff=0, eta_str = 0.05, thres_da_str = 0.9, thres_str = 0.9, thres_inp_str = 0.9):
         self.type = type  # Define the type of the unit: "leaky","leaky onset", "binary" or "dopaminergic"
         self.connections = []  # Initialize an empty list of input units
         self.potential = potential_0 # Initialize the potential of the unit
@@ -32,6 +32,8 @@ class Unit:
         self.activity_history = []  # Initialize an array that stores the potential and firing rate at each point in time
         self.tau_i = tau_i
         self.potential_i = potential_i_0
+        self.noise = 0
+        self.noise_coeff = noise_coeff # Noise coefficient
         self.dopa_in = dopa_in
         self.dopa_de = dopa_de
         # Hardcode these values for now as they are equal for all units
@@ -40,6 +42,10 @@ class Unit:
         self.thres_da_bla = 0.7
         self.max_w_bla = 2
         self.eta_bla = 0.08
+        self.eta_str = eta_str
+        self.thres_da_str = thres_da_str
+        self.thre_str = thres_str
+        self.thres_inp_str = thres_inp_str
 
 
     # Define a subclass for connections a neuron can have
@@ -81,12 +87,23 @@ class Unit:
             for connection in self.connections:
                 # Update only plastic connections
                 if connection.type == "plastic":
-                    weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
-                                    pos_sat(self.trace_change) * neg_sat(connection.input_unit.trace_change) * \
-                                    (self.max_w_bla - connection.weight)
+                    # Leaky onset units (BLA learning)
+                    if self.type == "leaky onset":
+                        weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
+                                        pos_sat(self.trace_change) * neg_sat(connection.input_unit.trace_change) * \
+                                        (self.max_w_bla - connection.weight)
+                    # Leaky units (Striatal learning)
+                    elif self.type == "leaky":
+                        weight_change = self.eta_str * pos_sat(dopa_input_unit.firing_rate - self.thres_da_str) * \
+                                        pos_sat(self.firing_rate - self.thres_str) *\
+                                        pos_sat(connection.input_unit.firing_rate  - self.thres_inp_str)
                     connection.weight = connection.weight + weight_change * dt
                     # Save the connection weight in an array
                     connection.weight_history.append(connection.weight)
+
+        # Update the noise
+        noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.tau
+        self.noise = self.noise + noise_change * dt
 
     # Return the dopaminergic input unit if there is one, else none
     def get_dopa_input_unit(self):
@@ -112,10 +129,10 @@ class Unit:
         if self.type != "binary":
             self.firing_rate = pos_sat(np.tanh(self.sigma * (self.potential - self.thres)))
 
-    # Compute the input to the unit given the input units and connection weights
+    # Compute the input to the unit given the input units and connection weights (plus the noise)
     def input(self):
         return np.sum([connection.input_unit.firing_rate * connection.weight for connection
-                       in self.connections if connection.input_unit.type != "dopaminergic"])
+                       in self.connections if connection.input_unit.type != "dopaminergic"]) + self.noise
 
     # Switch the binary units of and on
     def switch_activation_binary_units(self):
@@ -175,7 +192,7 @@ def build_and_connect_model_units():
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-    units["DM_1"] = Unit("leaky"); units["DM_2"] = Unit("leaky")
+    units["DM_1"] = Unit("leaky", noise_coeff=6); units["DM_2"] = Unit("leaky", noise_coeff=6)
     units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
 
     # Connect the units
