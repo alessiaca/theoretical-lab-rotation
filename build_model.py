@@ -28,7 +28,7 @@ class Unit:
         self.dopa_de = dopa_de
         self.eta_str = eta_str
         self.thres_da_str = thres_da_str
-        self.thre_str = thres_str
+        self.thres_str = thres_str
         self.thres_inp_str = thres_inp_str
         # Hardcode these values for BLA learning
         self.tau_trace = 500
@@ -185,7 +185,7 @@ def build_model():
 
 ###########################################################################################################
 # Build a small model for testing
-def build_small_model():
+def build_test_model():
     units = {}
     units["Binary"] = Unit("binary")
     units["Leaky"] = Unit("leaky")
@@ -195,5 +195,23 @@ def build_small_model():
     units["Dopaminergic"].add_connections([[units["Binary"], 1]])
     units["Leaky Onset"].add_connections([[units["Binary"], 1]])
 
+    return units
+
+# Build a model of the BLA with only one lever and food
+def build_BLA_model():
+    # Define the units needed
+    units = {}
+    units["Lever"] = Unit("binary")
+    units["Food"] = Unit("binary")
+    units["CS"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["US"] = Unit("leaky onset", tau=500, tau_i=500)
+    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
+    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    # Connect them
+    units["CS"].add_connections([[units["Lever"], 5], [units["US"], 0], [units["VTA"], 1]])
+    units["US"].add_connections(
+        [[units["Food"], 5], [units["CS"], 0], [units["VTA"], 1]])
+    units["LH"].add_connections([[units["Food"], 10], [units["US"], 5]])
+    units["VTA"].add_connections([[units["LH"], 20]])
     return units
 

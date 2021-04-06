@@ -53,24 +53,39 @@ def visualize_simulation_interactive(simulation):
     names = list(simulation.units.keys())[::-1]
     plt.yticks(np.arange(len(names)),names)
 
-    # Add a button to switch on the binary unit
-    input_ax = plt.axes([0.7, 0.05, 0.2, 0.075])
-    Input = Button(input_ax, 'Binary unit', color='#fbe8a6', hovercolor='#f4976c')
-    def Input_event(event):
-        units["Binary"].switch_activation_binary_units()
-        if Input.color == "#fbe8a6":
-            Input.color = "#d2fdff"
-            Input.hovercolor = "#b4def5"
+    # Get all the binary units
+    binary_units = [unit for unit in simulation.units.items() if unit[1].type == "binary"]
+    left_pos = list(np.linspace(0.05,0.8,len(binary_units)))
+
+    # Add a button to switch on each binary unit
+    buttons = []
+    for i,(name, unit) in enumerate(binary_units):
+        button_ax = plt.axes([left_pos[i], 0.05, 0.15, 0.075])
+        button = Button(button_ax, name, color='#fbe8a6', hovercolor='#f4976c')
+        buttons.append(button)
+
+    # Define a function that manages what happens when a button is clicked
+    def button_click_func(event):
+        # Get the button that was clicked (use the position of the button for identification)
+        l_pos = event.inaxes.get_position().get_points()[0, 0]
+        event_i = left_pos.index(l_pos)
+        binary_units[event_i][1].switch_activation_binary_units()
+        button = buttons[event_i]
+        if button.color == "#fbe8a6":
+            button.color = "#d2fdff"
+            button.hovercolor = "#b4def5"
         else:
-            Input.color = "#fbe8a6"
-            Input.hovercolor = "#f4976c"
-    Input.on_clicked(Input_event)
+            button.color = "#fbe8a6"
+            button.hovercolor = "#f4976c"
+    for button in buttons:
+        button.on_clicked(button_click_func)
 
     # Show the animated imshow
     updater = ax.imshow(simulation(), aspect='auto', vmin=0, vmax=1)
+    fig.colorbar(updater, ax=ax)
     def updatefig(*args):
         v = simulation()
         updater.set_array(v[::-1,:]) # Change the order of the units
         return updater,
-    ani = animation.FuncAnimation(fig, updatefig, interval=200, blit=True)
+    animation.FuncAnimation(fig, updatefig, interval=200, blit=True)
     plt.show()
