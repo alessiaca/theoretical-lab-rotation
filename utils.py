@@ -18,9 +18,22 @@ def neg_sat(x):
     return np.max([x*-1,0])
 
 ############################################################################################
+# Simulation of the model
+def simulation(units, t, binary_switches=None):
+    """binary_switches: Dictionary with names of units and times of switches (starting with 0)"""
+
+    for i_t in range(1, len(t)):
+        for i_u, (name, unit) in enumerate(units.items()):
+            unit.activity(1)
+            # Switch a binary unit on/off
+            if name in binary_switches.keys() and i_t in binary_switches[name]:
+                unit.switch_activation_binary_units()
+
+
+############################################################################################
 # Interactive visualization of the models activity (based on Andreas script "Interactive.py")
 
-class Simulation:
+class Simulation_window:
     """Class for the simulation of a model"""
 
     def __init__(self, units, step_size):
@@ -31,7 +44,7 @@ class Simulation:
         self.step = np.zeros([len(units), self.step_size])  # Array storing the activity of all uints in the last step
 
     # Returns the activity of the units in the last window
-    def __call__(self):
+    def __call__(self,type):
         for i in range(self.step_size):
             for j, unit in enumerate(self.units.values()):
                 unit.activity()
@@ -40,10 +53,11 @@ class Simulation:
         self.window = self.window[:, -self.window_size:]
         return self.window
 
-# Visualize the activity of the model in an interactove way
-def visualize_simulation_interactive(simulation):
+# Start an interactive simulation
+def interactive_simulation(units,step_size):
 
-    units = simulation.units
+    # Create a simulation object given the units and the step size of the simulation
+    simulation = Simulation_window(units,step_size)
 
     # Open the figure
     fig, ax = plt.subplots()
