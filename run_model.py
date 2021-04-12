@@ -1,30 +1,38 @@
 import numpy as np
 from build_model import build_plastic_model, build_fixed_model, build_test_model, build_BLA_model, Unit
-from utils import simulation, interactive_simulation
+from utils import simulation, interactive_simulation, visualize_stimulation_results
 import matplotlib.pyplot as plt
 # Script simulating the behaviour of the model
 
-# Build the model
+# Open issues:
+# Trace: The trace decays faster than the leaky onset (Trace time coefficient to low?)
+# How is the instrumental training performed? Is 0.05 dt and 15 sec the tril length? How to determine "action corresponding
+# to manipulandum chosen"?
+# What are the correct weights in the system? Inhibitory connection in the plot but positive weight in the table!?
+
+# Show interactive simulation with fixed weights
+units = build_fixed_model()
+interactive_simulation(units, 150)
+
+# Build the model to test learning
 units = build_BLA_model()
 
 # Define the times at which the binary units should be switched
+dt = 1 # sec
+trial_t_max = 10000
+t_max_instrumental = 60*20
 binary_switches = {}
-t = np.arange(0, 1000000, 1) # Time array of simulation
-time_on = 10000
-lever_on_switches = np.linspace(0,len(t)-time_on, 4,dtype=int)
-lever_off_switches = lever_on_switches + time_on
-binary_switches["Lever"] = np.vstack((lever_on_switches,lever_off_switches))
+t = np.arange(0, trial_t_max, dt) # Time array of simulation
+time_on_food = 1000
+time_on_lever = 500
+binary_switches["Lever"] = [0+dt,time_on_lever+dt]
+binary_switches["Food"] = [time_on_lever+dt,time_on_lever+time_on_food+dt]
 
 # Run the model
-simulation(units,t, binary_switches)
+simulation(units,t, dt,binary_switches)
 
 # Visualize the activity
-plt.plot(np.array(units["CS"].activity_history)[:,2])
-
-# Visualize the activity of the model in an interactive way
-interactive_simulation(units, 100)
-
-# Run the model
+visualize_stimulation_results(units,["US","CS","VTA"])
 
 
 print("debug")
