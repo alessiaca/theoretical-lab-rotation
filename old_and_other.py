@@ -34,6 +34,7 @@ def check_units():
     plt.subplots_adjust(hspace=1)
     plt.show()
 
+check_units()
 
 # Test with only one stimulus if the lever gets associated with the food (weights update as expected)
 def test_instrumental_training():

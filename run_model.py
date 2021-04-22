@@ -1,5 +1,5 @@
 import numpy as np
-from build_model import build_plastic_model, build_fixed_model, build_test_model, build_BLA_model, Unit
+from build_model import build_plastic_model, build_fixed_model, build_test_model, build_BLA_model, Unit, build_fixed_action_loop
 from utils import simulation, interactive_simulation, visualize_stimulation_results
 import matplotlib.pyplot as plt
 # Script simulating the behaviour of the model
@@ -11,8 +11,9 @@ import matplotlib.pyplot as plt
 # What are the correct weights in the system? Inhibitory connection in the plot but positive weight in the table!?
 
 # Show interactive simulation with fixed weights
-units = build_fixed_model()
+units = build_fixed_action_loop()
 interactive_simulation(units, 150)
+
 
 # Build the model to test learning
 units = build_BLA_model()

@@ -134,9 +134,9 @@ class Unit:
     def input(self):
         input = np.sum([connection.input_unit.firing_rate * connection.weight for connection
                         in self.connections if connection.input_unit.type != "dopaminergic"]) + self.noise
-        # Add small input to PL
-        if self.name[:2] == "PL":
-            input = input + 500
+        # Add small input to the cortex --> to start activity in the loop
+        if self.name[:2] in ["PL","MC"]:
+            input = input + 0.65
         return input
 
 
@@ -151,6 +151,42 @@ class Unit:
         self.integrate(dt=dt)
         self.update_firing_rate()
         self.activity_history.append([self.potential, self.firing_rate, self.trace])
+
+
+###########################################################################################################
+def build_fixed_action_loop():
+    # Initialize the units of the model, leave out the amygdala for now
+    units = {}
+    units["Cue"] = Unit("binary")
+    units["Amgydala"] = Unit("binary")
+    units["DLS_1"] = Unit("leaky")
+    units["DLS_2"] = Unit("leaky")
+    units["STNdl_1"] = Unit("leaky")
+    units["STNdl_2"] = Unit("leaky")
+    units["GPi_1"] = Unit("leaky")
+    units["GPi_2"] = Unit("leaky")
+    units["MGV_1"] = Unit("leaky", noise_coeff=6)
+    units["MGV_2"] = Unit("leaky", noise_coeff=6)
+    units["MC_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
+    units["MC_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
+    # Connect the units
+    units["DLS_1"].add_connections([[units["Amgydala"], -1],[units["Cue"], 1], [units["MC_1"], 1]])
+    units["DLS_2"].add_connections([[units["Amgydala"], 1], [units["MC_2"], 1]])
+    units["STNdl_1"].add_connections([[units["MC_1"], 1.6]])
+    units["STNdl_2"].add_connections([[units["MC_2"], 1.6]])
+    units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
+    units["GPi_2"].add_connections([[units["DLS_2"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
+    units["MGV_1"].add_connections([[units["GPi_1"], -1.5], [units["MGV_1"], 1], [units["MGV_2"], -0.8]])
+    units["MGV_2"].add_connections([[units["GPi_2"], -1.5], [units["MGV_1"], -0.8], [units["MGV_2"], 1]])
+    units["MC_1"].add_connections([[units["MGV_1"], 1]])
+    units["MC_2"].add_connections([[units["MGV_2"], 1]])
+
+    # Add the names to the class objects
+    for name, unit in units.items():
+        unit.name = name
+    return units
+
+
 
 ###########################################################################################################
 def build_plastic_model():
