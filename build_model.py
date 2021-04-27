@@ -135,8 +135,8 @@ class Unit:
         input = np.sum([connection.input_unit.firing_rate * connection.weight for connection
                         in self.connections if connection.input_unit.type != "dopaminergic"]) + self.noise
         # Add small input to the cortex --> to start activity in the loop
-        if self.name[:2] in ["PL","MC"]:
-            input = input + 0.65
+        if self.name[:4] in ["PL_1","MC"]:
+            input = input + 0.5
         return input
 
 
@@ -154,51 +154,11 @@ class Unit:
 
 
 ###########################################################################################################
-def build_fixed_action_loop():
-    # Initialize the units of the model, leave out the amygdala for now
-    units = {}
-    units["Cue"] = Unit("binary")
-    units["Amgydala"] = Unit("binary")
-    units["DLS_1"] = Unit("leaky")
-    units["DLS_2"] = Unit("leaky")
-    units["STNdl_1"] = Unit("leaky")
-    units["STNdl_2"] = Unit("leaky")
-    units["GPi_1"] = Unit("leaky")
-    units["GPi_2"] = Unit("leaky")
-    units["MGV_1"] = Unit("leaky", noise_coeff=6)
-    units["MGV_2"] = Unit("leaky", noise_coeff=6)
-    units["MC_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
-    units["MC_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
-    # Connect the units
-    units["DLS_1"].add_connections([[units["Amgydala"], -1],[units["Cue"], 1], [units["MC_1"], 1]])
-    units["DLS_2"].add_connections([[units["Amgydala"], 1], [units["MC_2"], 1]])
-    units["STNdl_1"].add_connections([[units["MC_1"], 1.6]])
-    units["STNdl_2"].add_connections([[units["MC_2"], 1.6]])
-    units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
-    units["GPi_2"].add_connections([[units["DLS_2"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
-    units["MGV_1"].add_connections([[units["GPi_1"], -1.5], [units["MGV_1"], 1], [units["MGV_2"], -0.8]])
-    units["MGV_2"].add_connections([[units["GPi_2"], -1.5], [units["MGV_1"], -0.8], [units["MGV_2"], 1]])
-    units["MC_1"].add_connections([[units["MGV_1"], 1]])
-    units["MC_2"].add_connections([[units["MGV_2"], 1]])
-
-    # Add the names to the class objects
-    for name, unit in units.items():
-        unit.name = name
-    return units
-
-
-
-###########################################################################################################
-def build_plastic_model():
+def build_goal_loop():
 
     # Initialize the units of the model (start with the goal loop)
     units = {}
-    units["Lever"] = Unit("binary")
-    units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary")
-    units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
-    units["CSa"] = Unit("leaky onset", tau=500, tau_i=500); units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["USa"] = Unit("leaky onset", tau=500, tau_i=500); units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
+    units["Cue"] = Unit("binary"); units["Amygdala"] = Unit("binary")
     units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
@@ -206,22 +166,19 @@ def build_plastic_model():
     units["DM_1"] = Unit("leaky", noise_coeff=6); units["DM_2"] = Unit("leaky", noise_coeff=6)
     units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
 
-    # Connect the units
-    # BLA units connected to themselves?
-    units["CSa"].add_connections([[units["Lever"], 5], [units["CSb"], 0, "plastic"], [units["USa"], 0, "plastic"], [units["USb"], 0, "plastic"], [units["VTA"], 1]])
-    units["CSb"].add_connections([[units["Lever"], 5], [units["CSa"], 0, "plastic"], [units["USa"], 0, "plastic"], [units["USb"], 0, "plastic"], [units["VTA"], 1]])
-    units["USa"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10], [units["CSa"], 0, "plastic"], [units["CSb"], 0, "plastic"], [units["USb"], 0, "plastic"], [units["VTA"], 1]])
-    units["USb"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10],[units["CSa"], 0, "plastic"], [units["CSb"], 0, "plastic"], [units["USa"], 0, "plastic"], [units["VTA"], 1]])
-    units["LH"].add_connections([[units["FoodA"], 10], [units["FoodB"], 5], [units["USa"], 5], [units["USb"], 5]])
-    units["VTA"].add_connections([[units["LH"], 20]])
-    units["NAc_1"].add_connections([[units["VTA"], 1], [units["USa"], 0, "plastic"], [units["USb"], 0, "plastic"], [units["PL_1"], 1]])
-    units["NAc_2"].add_connections([[units["VTA"], 1], [units["USa"], 0, "plastic"], [units["USb"], 0, "plastic"], [units["PL_2"], 1]])
+    # Connect the units - fixed at maximum connection weight
+    units["VTA"].add_connections([[units["Amygdala"], 2]])
+    # What connection weight between teh cue and the NAc? In the MM the maximum connection weight was 2 for each and
+    # each US was connected to each NAc --> Hence a connection from the cue to both NAc with max weight 4?
+    units["NAc_1"].add_connections([[units["Cue"], 3], [units["PL_1"], 1]])
+    units["NAc_2"].add_connections([[units["Cue"], 3], [units["VTA"], 1], [units["PL_2"], 1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
-    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], -2], [units["STNv_2"], -2]])
-    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], -2], [units["STNv_2"], -2]])
-    units["DM_1"].add_connections([[units["SNpr_1"], 1], [units["DM_1"], 1], [units["DM_2"], -0.8]])
-    units["DM_2"].add_connections([[units["SNpr_2"], 1],  [units["DM_1"], -0.8], [units["DM_2"], 1]])
+    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
+    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
+    # What is the weight of the connection of a DM unit on itself? Chose default: 1
+    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -0.8], [units["DM_1"], 1.5]])
+    units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -0.8], [units["DM_2"], 1.5]])
     units["PL_1"].add_connections([[units["DM_1"], 1]])
     units["PL_2"].add_connections([[units["DM_2"], 1]])
 
@@ -230,86 +187,4 @@ def build_plastic_model():
         unit.name = name
     return units
 
-
-# Model with fixed weights (maximum weights- no learning)
-def build_fixed_model():
-
-    # Initialize the units of the model (start with the goal loop)
-    units = {}
-    units["Lever"] = Unit("binary"); units["Chain"] = Unit("binary")
-    units["FoodA"] = Unit("binary"); units["FoodB"] = Unit("binary")
-    units["SatA"] = Unit("binary"); units["SatB"] = Unit("binary")
-    units["CSa"] = Unit("leaky onset", tau=500, tau_i=500); units["CSb"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["USa"] = Unit("leaky onset", tau=500, tau_i=500); units["USb"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
-    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=1.5)
-    units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
-    units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
-    units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-    units["DM_1"] = Unit("leaky", noise_coeff=6); units["DM_2"] = Unit("leaky", noise_coeff=6)
-    units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
-
-    # Connect the units
-    # BLA units connected to themselves?
-    units["CSa"].add_connections([[units["Lever"], 5], [units["CSb"], 2], [units["USa"], 2], [units["USb"], 2], [units["VTA"], 1]])
-    units["CSb"].add_connections([[units["Chain"], 5], [units["CSa"], 2], [units["USa"], 2], [units["USb"], 2], [units["VTA"], 1]])
-    units["USa"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10], [units["CSa"], 2], [units["CSb"], 2], [units["USb"],2], [units["VTA"], 1]])
-    units["USb"].add_connections([[units["FoodA"], 5], [units["FoodB"], 5], [units["SatA"], -10], [units["SatB"], -10],[units["CSa"], 2], [units["CSb"], 2], [units["USa"], 2], [units["VTA"], 1]])
-    units["LH"].add_connections([[units["FoodA"], 10], [units["FoodB"], 10], [units["USa"], 5], [units["USb"], 5]])
-    units["VTA"].add_connections([[units["LH"], 20]])
-    units["NAc_1"].add_connections([[units["VTA"], 1], [units["USa"], 2], [units["USb"], 2], [units["PL_1"], 1]])
-    units["NAc_2"].add_connections([[units["VTA"], 1], [units["USa"], 2], [units["USb"], 2], [units["PL_2"], 1]])
-    units["STNv_1"].add_connections([[units["PL_1"], 1.6]])
-    units["STNv_2"].add_connections([[units["PL_2"], 1.6]])
-    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
-    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
-    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_1"], 1], [units["DM_2"], -0.8]])
-    units["DM_2"].add_connections([[units["SNpr_2"], -1.5],  [units["DM_1"], -0.8], [units["DM_2"], 1]])
-    units["PL_1"].add_connections([[units["DM_1"], 1]])
-    units["PL_2"].add_connections([[units["DM_2"], 1]])
-
-    # Add the names to the class objects
-    for name, unit in units.items():
-        unit.name = name
-
-    return units
-
-###########################################################################################################
-# Build a small model for testing
-def build_test_model():
-    units = {}
-    units["Binary"] = Unit("binary")
-    units["Leaky"] = Unit("leaky")
-    units["Dopaminergic"] = Unit("dopaminergic")
-    units["Leaky Onset"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["Leaky"].add_connections([[units["Binary"], 1]])
-    units["Dopaminergic"].add_connections([[units["Binary"], 1]])
-    units["Leaky Onset"].add_connections([[units["Binary"], 1]])
-
-    # Add the names to the class objects
-    for name, unit in units.items():
-        unit.name = name
-
-    return units
-
-# Build a model of the BLA with only one lever and food
-def build_BLA_model():
-    # Define the units needed
-    units = {}
-    units["Lever"] = Unit("binary")
-    units["Food"] = Unit("binary")
-    units["CS"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["US"] = Unit("leaky onset", tau=500, tau_i=500)
-    units["LH"] = Unit("leaky onset", tau=100, tau_i=500)
-    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
-    # Connect them
-    units["CS"].add_connections([[units["Lever"], 5], [units["US"], 0, "plastic"], [units["VTA"], 1]])
-    units["US"].add_connections([[units["Food"], 5], [units["CS"], 0, "plastic"], [units["VTA"], 1]])
-    units["LH"].add_connections([[units["Food"], 10], [units["US"], 5]])
-    units["VTA"].add_connections([[units["LH"], 20]])
-
-    # Add the names to the class objects
-    for name, unit in units.items():
-        unit.name = name
-    return units
 
