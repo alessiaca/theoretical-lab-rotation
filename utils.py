@@ -82,8 +82,9 @@ def visualize_stimulation_results(units,visualize_units):
 class Simulation_window:
     """Class for the simulation of a model"""
 
-    def __init__(self, units, step_size):
+    def __init__(self, units, step_size,type):
         self.units = units
+        self.type = type
         self.step_size = step_size  # Amount of new samples displayed at each time step
         self.window_size = 10000  # Number of samples displayed at the same time
         self.window = np.zeros([len(units), self.window_size])  # Array storing the activity of all units in the window
@@ -94,16 +95,19 @@ class Simulation_window:
         for i in range(self.step_size):
             for j, unit in enumerate(self.units.values()):
                 unit.activity()
-                self.step[j, i] = unit.firing_rate
+                if self.type == "firing rate":
+                    self.step[j, i] = unit.firing_rate
+                elif self.type == "potential":
+                    self.step[j, i] = unit.potential
         self.window = np.hstack((self.window, self.step))
         self.window = self.window[:, -self.window_size:]
         return self.window
 
 # Start an interactive simulation
-def interactive_simulation(units,step_size):
+def interactive_simulation(units,step_size,type="firing rate"):
 
     # Create a simulation object given the units and the step size of the simulation
-    simulation_window = Simulation_window(units,step_size)
+    simulation_window = Simulation_window(units,step_size,type)
 
     # Open the figure
     fig, ax = plt.subplots()

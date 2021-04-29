@@ -20,7 +20,7 @@ class Unit:
         self.tau = tau  # Define the time constant of the unit
         self.thres = thres  # Define the steepness of the hyperbolic function for the unit activation
         self.sigma = sigma  # Define the activation threshold
-        self.activity_history = []  # Initialize an array that stores the potential and firing rate at each point in time
+        self.activity_history = []#[[self.potential, self.firing_rate, self.trace]]  # Initialize an array that stores the potential and firing rate at each point in time
         self.tau_i = tau_i
         self.potential_i = potential_i_0
         self.noise = 0
@@ -69,14 +69,6 @@ class Unit:
             self.potential = self.potential + potential_change * dt
             self.potential_i = self.potential_i + potential_i_change * dt
 
-        # Update the trace - only needed for BLA units, but done for all due to simplicity
-        # Add the amplification coefficient to the trace if the threshold is crossed for the first time
-        if self.firing_rate > self.thres and np.round(self.activity_history[-2][1], 6) <= self.thres:
-            self.trace_change = (-self.trace + self.alpha * self.firing_rate) / self.tau_trace
-        else:
-            self.trace_change = -self.trace / self.tau_trace
-        self.trace = self.trace + self.trace_change * dt
-
         # Update the weights - only for units that receive dopaminergic input
         dopa_input_unit = self.get_dopa_input_unit()
         if dopa_input_unit:
@@ -98,7 +90,7 @@ class Unit:
                     connection.weight_history.append(connection.weight)
 
         # Update the noise
-        noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.tau
+        noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / 80
         self.noise = self.noise + noise_change * dt
 
     #######################################################################################################
@@ -132,12 +124,17 @@ class Unit:
     #######################################################################################################
     # Compute the input to the unit given the input units and connection weights (plus the noise)
     def input(self):
-        input = np.sum([connection.input_unit.firing_rate * connection.weight for connection
-                        in self.connections if connection.input_unit.type != "dopaminergic"]) + self.noise
-        # Add small input to the cortex --> to start activity in the loop
-        if self.name[:4] in ["PL_1","MC"]:
-            input = input + 0.5
-        return input
+        input = 0
+        for connection in self.connections:
+            input_unit = connection.input_unit
+            # If the input comes from the unit on the same level and the unit was already updated, take the firing rate
+            # from the last time step -> Simultaneous update on one level
+            if input_unit.name[:2] == self.name[:2] and len(input_unit.activity_history) > len(self.activity_history):
+                input += input_unit.activity_history[-1][1] * connection.weight
+            else:
+                input += input_unit.firing_rate * connection.weight
+
+        return input + self.noise
 
 
     #######################################################################################################
@@ -154,33 +151,51 @@ class Unit:
 
 
 ###########################################################################################################
-def build_goal_loop():
+def build_model():
 
-    # Initialize the units of the model (start with the goal loop)
+    # Initialize the units of the model
     units = {}
-    units["Cue"] = Unit("binary"); units["Amygdala"] = Unit("binary")
-    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    units["Cue"] = Unit("binary")
+
+    # Goal loop
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-    units["DM_1"] = Unit("leaky", noise_coeff=6); units["DM_2"] = Unit("leaky", noise_coeff=6)
-    units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
+    units["DM_1"] = Unit("leaky", noise_coeff=20); units["DM_2"] = Unit("leaky", noise_coeff=20)
+    units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.1); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.1)
+
+    # Action loop
+    units["DLS_1"] = Unit("leaky"); units["DLS_2"] = Unit("leaky")
+    units["STNdl_1"] = Unit("leaky"); units["STNdl_2"] = Unit("leaky")
+    units["GPi_1"] = Unit("leaky"); units["GPi_2"] = Unit("leaky")
+    units["MGV_1"] = Unit("leaky", noise_coeff=0.25); units["MGV_2"] = Unit("leaky", noise_coeff=0.25)
+    units["MC_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.1); units["MC_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.1)
 
     # Connect the units - fixed at maximum connection weight
-    units["VTA"].add_connections([[units["Amygdala"], 2]])
-    # What connection weight between teh cue and the NAc? In the MM the maximum connection weight was 2 for each and
-    # each US was connected to each NAc --> Hence a connection from the cue to both NAc with max weight 4?
-    units["NAc_1"].add_connections([[units["Cue"], 3], [units["PL_1"], 1]])
-    units["NAc_2"].add_connections([[units["Cue"], 3], [units["VTA"], 1], [units["PL_2"], 1]])
+
+    # Goal loop
+    units["NAc_1"].add_connections([[units["Cue"], 2], [units["PL_1"], 0.75]])
+    units["NAc_2"].add_connections([[units["PL_2"], 0.75]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
     units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
     units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
-    # What is the weight of the connection of a DM unit on itself? Chose default: 1
-    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -0.8], [units["DM_1"], 1.5]])
-    units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -0.8], [units["DM_2"], 1.5]])
-    units["PL_1"].add_connections([[units["DM_1"], 1]])
-    units["PL_2"].add_connections([[units["DM_2"], 1]])
+    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -1.8], [units["DM_1"], 0.8]])
+    units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -1.8], [units["DM_2"], 0.8]])
+    units["PL_1"].add_connections([[units["DM_1"], 1]]); units["PL_2"].add_connections([[units["DM_2"], 1]])
+    #units["PL_1"].add_connections([[units["MC_1"], 1]]); units["PL_2"].add_connections([[units["MC_2"], 1]])
+
+    # Action loop
+    units["DLS_1"].add_connections([[units["Cue"], 2], [units["MC_1"], 1]])
+    units["DLS_2"].add_connections([[units["MC_2"], 1]])
+    units["STNdl_1"].add_connections([[units["MC_1"], 1]])
+    units["STNdl_2"].add_connections([[units["MC_2"], 1]])
+    units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
+    units["GPi_2"].add_connections([[units["DLS_2"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
+    units["MGV_1"].add_connections([[units["GPi_1"], -1.5], [units["MGV_1"], 0.8], [units["MGV_2"], -0.8]])
+    units["MGV_2"].add_connections([[units["GPi_2"], -1.5], [units["MGV_1"], -0.8], [units["MGV_2"], 0.8]])
+    units["MC_1"].add_connections([[units["MGV_1"], 1]]); units["MC_2"].add_connections([[units["MGV_2"], 1]])
+    units["MC_1"].add_connections([[units["PL_1"], 0.2]]); units["MC_2"].add_connections([[units["PL_2"], 0.2]])
 
     # Add the names to the class objects
     for name,unit in units.items():

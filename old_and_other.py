@@ -230,3 +230,36 @@ simulation(units,t, dt,binary_switches)
 
 # Visualize the activity
 visualize_stimulation_results(units,["US","CS","VTA"])
+
+def build_goal_loop():
+
+    # Initialize the units of the model (start with the goal loop)
+    units = {}
+    units["Cue"] = Unit("binary"); units["Amygdala"] = Unit("binary")
+    units["VTA"] = Unit("dopaminergic", dopa_in=0.8, dopa_de=4)
+    units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
+    units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
+    units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
+    units["DM_1"] = Unit("leaky", noise_coeff=6); units["DM_2"] = Unit("leaky", noise_coeff=6)
+    units["PL_1"] = Unit("leaky", tau=2000, sigma=20, thres=0.8); units["PL_2"] = Unit("leaky", tau=2000, sigma=20, thres=0.8)
+
+    # Connect the units - fixed at maximum connection weight
+    units["VTA"].add_connections([[units["Amygdala"], 2]])
+    # What connection weight between teh cue and the NAc? In the MM the maximum connection weight was 2 for each and
+    # each US was connected to each NAc --> Hence a connection from the cue to both NAc with max weight 4?
+    units["NAc_1"].add_connections([[units["Cue"], 2], [units["PL_1"], 1]])
+    units["NAc_2"].add_connections([[units["Cue"], 0.5], [units["VTA"], 1], [units["PL_2"], 1]])
+    units["STNv_1"].add_connections([[units["PL_1"], 1]])
+    units["STNv_2"].add_connections([[units["PL_2"], 1]])
+    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
+    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
+    # What is the weight of the connection of a DM unit on itself? Chose default: 1
+    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -0.8], [units["DM_1"], 1]])
+    units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -0.8], [units["DM_2"], 1]])
+    units["PL_1"].add_connections([[units["DM_1"], 1]])
+    units["PL_2"].add_connections([[units["DM_2"], 1]])
+
+    # Add the names to the class objects
+    for name,unit in units.items():
+        unit.name = name
+    return units
