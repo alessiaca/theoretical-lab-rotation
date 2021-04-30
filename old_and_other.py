@@ -263,3 +263,45 @@ def build_goal_loop():
     for name,unit in units.items():
         unit.name = name
     return units
+
+    #######################################################################################################
+    # Get the weight of the input (dependent on dopaminergic input units)
+    def get_input_weight(self):
+        # Check if the unit is connected to a dopaminergic unit
+        dopa_input_unit = self.get_dopa_input_unit()
+        if dopa_input_unit:
+            input_weight = dopa_input_unit.dopa_in + dopa_input_unit.dopa_de * dopa_input_unit.firing_rate
+        else:
+            input_weight = 1
+        return input_weight
+
+    #######################################################################################################
+    # Return the dopaminergic input unit if there is one, else none
+    def get_dopa_input_unit(self):
+        dopa_input_unit = [connection.input_unit for connection in self.connections
+                           if connection.input_unit.type == "dopaminergic"]
+        if dopa_input_unit:
+            return dopa_input_unit[0]
+        else:
+            return None
+
+
+        # Update the weights - only for units that receive dopaminergic input
+        dopa_input_unit = self.get_dopa_input_unit()
+        if dopa_input_unit:
+            for connection in self.connections:
+                # Update only plastic connections
+                if connection.type == "plastic":
+                    # Leaky onset units (BLA learning)
+                    if self.type == "leaky onset":
+                        weight_change = self.eta_bla * pos_sat(dopa_input_unit.firing_rate - self.thres_da_bla) * \
+                                        pos_sat(self.trace_change) * neg_sat(connection.input_unit.trace_change) * \
+                                        (self.max_w_bla - connection.weight)
+                    # Leaky units (Striatal learning)
+                    elif self.type == "leaky":
+                        weight_change = self.eta_str * pos_sat(dopa_input_unit.firing_rate - self.thres_da_str) * \
+                                        pos_sat(self.firing_rate - self.thres_str) *\
+                                        pos_sat(connection.input_unit.firing_rate  - self.thres_inp_str)
+                    connection.weight = connection.weight + weight_change * dt
+                    # Save the connection weight in an array
+                    connection.weight_history.append(connection.weight)
