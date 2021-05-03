@@ -8,27 +8,30 @@ class Unit:
 
     #######################################################################################################
     # Initialize the unit
-    def __init__(self, type, name=None, tau=300, thres=0, sigma=1, potential_0=0, tau_i=None, potential_i_0=0, dopa_de=None,
-                 dopa_in=None, noise_coeff=0, eta_str = 0.05, thres_da_str = 0.9, thres_str = 0.9, thres_inp_str = 0.9):
-        self.type = type  # Define the type of the unit: "leaky","leaky onset", "binary" or "dopaminergic"
+    def __init__(self, type, name=None, tau=300, thres=0, sigma=1,noise_coeff=0):
+        self.type = type  # Define the type of the unit: "leaky" or "binary"
         self.name = name
         self.connections = []  # Initialize an empty list of input units
-        self.potential = potential_0 # Initialize the potential of the unit
+        self.potential = 0 # Initialize the potential of the unit
         self.firing_rate = 0
         self.tau = tau  # Define the time constant of the unit
         self.thres = thres  # Define the steepness of the hyperbolic function for the unit activation
         self.sigma = sigma  # Define the activation threshold
-        self.activity_history = [[self.potential, self.firing_rate]]  # Initialize an array that stores the potential and firing rate at each point in time
-        self.tau_i = tau_i
-        self.potential_i = potential_i_0
         self.noise = 0
         self.noise_coeff = noise_coeff # Noise coefficient
-        self.dopa_in = dopa_in
-        self.dopa_de = dopa_de
-        self.eta_str = eta_str
-        self.thres_da_str = thres_da_str
-        self.thres_str = thres_str
-        self.thres_inp_str = thres_inp_str
+        self.noise_trace = 80
+        self.trace = 0
+        self.tau_trace = 20000
+        self.thres_trace = 0.8  # Threshold when amplification coefficient is added
+        self.alpha = 20000
+        self.eta = 0.1  # Learning rate (between cue and DLS)
+        self.thres_DLS = 0.5
+        self.thres_Cue = 0.3
+        self.thres_CeA = 1
+        self.not_crossed_trace= True
+        self.max_weight = 2
+        self.activity_history = [[0, 0, 0], [0, 0, 0]]  # Initialize an array that stores the potential and firing rate at each point in time
+
 
     #######################################################################################################
     # Define a subclass for connections a neuron can have
@@ -52,18 +55,38 @@ class Unit:
     def integrate(self, dt):
 
         # Update the potential
-        if self.type == "leaky":
-            potential_change = (-self.potential + self.input()) / self.tau
-            self.potential = self.potential + potential_change * dt
-        elif self.type == "leaky onset":
-            potential_change = (-self.potential + pos_sat(self.input() - self.potential_i)) / self.tau
-            potential_i_change = (-self.potential_i + self.input()) / self.tau_i
-            self.potential = self.potential + potential_change * dt
-            self.potential_i = self.potential_i + potential_i_change * dt
+        potential_change = (-self.potential + self.input()) / self.tau
+        self.potential = self.potential + potential_change * dt
 
-        # Update the noise
-        noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / 80
-        self.noise = self.noise + noise_change * dt
+        # Update the trace - only for the Cue
+        # Add the amplification coefficient only once when the activation threshold is passed (for the first time)
+        if self.name == "Cue":
+            if self.not_crossed_trace and self.firing_rate > self.thres_trace and \
+                    np.all(self.firing_rate > np.array(self.activity_history)[:-1, 1]):
+                trace_change = (-self.trace + self.firing_rate * self.alpha) / self.tau_trace
+                self.not_crossed_trace = False
+            else:
+                trace_change = -self.trace / self.tau_trace
+            self.trace = self.trace + trace_change * dt
+
+        # Update the noise - only for the thalamus
+        if self.name[:2] in ["MG", "DM"]:
+            noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.noise_trace
+            self.noise = self.noise + noise_change * dt
+
+        # Update the weight
+        for connection in self.connections:
+            # Update only plastic connections
+            if connection.type == "plastic":
+                # Get the CeA unit which controls learning
+                CeA_unit = [connection.input_unit for connection in self.connections if connection.input_unit.name == "CeA"][0]
+                # Compute the weight update
+                weight_change = self.eta * pos_sat(self.firing_rate - self.thres_DLS) * \
+                                pos_sat(connection.input_unit.firing_rate - self.thres_Cue) * \
+                                neg_sat(CeA_unit.firing_rate - self.thres_CeA) * (self.max_weight - connection.weight)
+                connection.weight = connection.weight + weight_change * dt
+                # Save the connection weight in an array
+                connection.weight_history.append(connection.weight)
 
     #######################################################################################################
     # Given the potential and the parameters, compute the firing rate of the neuron
@@ -98,7 +121,7 @@ class Unit:
     def activity(self, dt=1):
         self.integrate(dt=dt)
         self.update_firing_rate()
-        self.activity_history.append([self.potential, self.firing_rate])
+        self.activity_history.append([self.potential, self.firing_rate, self.trace])
 
 
 ###########################################################################################################
@@ -107,6 +130,10 @@ def build_model():
     # Initialize the units of the model
     units = {}
     units["Cue"] = Unit("binary")
+
+    # Amygdala
+    units["BLA_1"] = Unit("leaky")
+    units["CeA"] = Unit("leaky", sigma=5, thres=0.5)
 
     # Goal loop
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
@@ -125,7 +152,8 @@ def build_model():
     # Connect the units - fixed at maximum connection weight
 
     # Goal loop
-    units["NAc_1"].add_connections([[units["Cue"], 2], [units["PL_1"], 1]])
+    units["BLA_1"].add_connections([[units["Cue"], 2]])
+    units["NAc_1"].add_connections([[units["BLA_1"], 2], [units["PL_1"], 1]])
     units["NAc_2"].add_connections([[units["PL_2"], 1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
@@ -137,7 +165,7 @@ def build_model():
     units["PL_1"].add_connections([[units["MC_1"], 1]]); units["PL_2"].add_connections([[units["MC_2"], 1]])
 
     # Action loop
-    units["DLS_1"].add_connections([[units["Cue"], 2], [units["MC_1"], 1]])
+    units["DLS_1"].add_connections([[units["Cue"],  0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
     units["DLS_2"].add_connections([[units["MC_2"], 1]])
     units["STNdl_1"].add_connections([[units["MC_1"], 1]])
     units["STNdl_2"].add_connections([[units["MC_2"], 1]])
