@@ -24,7 +24,7 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.8  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.1  # Learning rate (between cue and DLS)
+        self.eta = 0.0001  # Learning rate (between cue and DLS)
         self.thres_DLS = 0.5
         self.thres_Cue = 0.3
         self.thres_CeA = 1
@@ -82,7 +82,7 @@ class Unit:
                 CeA_unit = [connection.input_unit for connection in self.connections if connection.input_unit.name == "CeA"][0]
                 # Compute the weight update
                 weight_change = self.eta * pos_sat(self.firing_rate - self.thres_DLS) * \
-                                pos_sat(connection.input_unit.firing_rate - self.thres_Cue) * \
+                                pos_sat(connection.input_unit.activity_history[-1][2] - self.thres_Cue) * \
                                 neg_sat(CeA_unit.firing_rate - self.thres_CeA) * (self.max_weight - connection.weight)
                 connection.weight = connection.weight + weight_change * dt
                 # Save the connection weight in an array
