@@ -19,12 +19,12 @@ class Unit:
         self.sigma = sigma  # Define the activation threshold
         self.noise = 0
         self.noise_coeff = noise_coeff # Noise coefficient
-        self.noise_trace = 80
+        self.tau_noise = 80
         self.trace = 0
         self.tau_trace = 20000
         self.thres_trace = 0.8  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.0001  # Learning rate (between cue and DLS)
+        self.eta = 0.00005  # Learning rate (between cue and DLS)
         self.thres_DLS = 0.5
         self.thres_Cue = 0.3
         self.thres_CeA = 1
@@ -71,7 +71,7 @@ class Unit:
 
         # Update the noise - only for the thalamus
         if self.name[:2] in ["MG", "DM"]:
-            noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.noise_trace
+            noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.tau_noise
             self.noise = self.noise + noise_change * dt
 
         # Update the weight
@@ -132,29 +132,30 @@ def build_model():
     units["Cue"] = Unit("binary")
 
     # Amygdala
-    units["BLA_1"] = Unit("leaky")
+    units["BLA_1"] = Unit("leaky"); units["BLA_2"] = Unit("leaky")
     units["CeA"] = Unit("leaky", sigma=5, thres=0.5)
 
     # Goal loop
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-    units["DM_1"] = Unit("leaky", noise_coeff=15); units["DM_2"] = Unit("leaky", noise_coeff=15)
+    units["DM_1"] = Unit("leaky", noise_coeff=14); units["DM_2"] = Unit("leaky", noise_coeff=14)
     units["PL_1"] = Unit("leaky", tau=1000, sigma=2, thres=0); units["PL_2"] = Unit("leaky", tau=1000, sigma=2, thres=0)
 
     # Action loop
     units["DLS_1"] = Unit("leaky"); units["DLS_2"] = Unit("leaky")
     units["STNdl_1"] = Unit("leaky"); units["STNdl_2"] = Unit("leaky")
     units["GPi_1"] = Unit("leaky"); units["GPi_2"] = Unit("leaky")
-    units["MGV_1"] = Unit("leaky", noise_coeff=15); units["MGV_2"] = Unit("leaky", noise_coeff=15)
+    units["MGV_1"] = Unit("leaky", noise_coeff=2); units["MGV_2"] = Unit("leaky", noise_coeff=2)
     units["MC_1"] = Unit("leaky", tau=1000, sigma=2, thres=0); units["MC_2"] = Unit("leaky", tau=1000, sigma=2, thres=0)
 
     # Connect the units - fixed at maximum connection weight
 
     # Goal loop
-    units["BLA_1"].add_connections([[units["Cue"], 2]])
+    units["BLA_1"].add_connections([[units["Cue"], 2], [units["BLA_2"], -20]])
+    units["BLA_2"].add_connections([[units["Cue"], 0]])
     units["NAc_1"].add_connections([[units["BLA_1"], 2], [units["PL_1"], 1]])
-    units["NAc_2"].add_connections([[units["PL_2"], 1]])
+    units["NAc_2"].add_connections([[units["BLA_2"], 2], [units["PL_2"], 1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
     units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
@@ -162,11 +163,11 @@ def build_model():
     units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -0.8], [units["DM_1"], 0.8]])
     units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -0.8], [units["DM_2"], 0.8]])
     units["PL_1"].add_connections([[units["DM_1"], 1]]); units["PL_2"].add_connections([[units["DM_2"], 1]])
-    units["PL_1"].add_connections([[units["MC_1"], 1]]); units["PL_2"].add_connections([[units["MC_2"], 1]])
+    units["PL_1"].add_connections([[units["MC_1"], 0.2]]); units["PL_2"].add_connections([[units["MC_2"], 0.2]])
 
     # Action loop
-    units["DLS_1"].add_connections([[units["Cue"],  0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
-    units["DLS_2"].add_connections([[units["MC_2"], 1]])
+    units["DLS_1"].add_connections([[units["Cue"],  0], [units["MC_1"], 1], [units["CeA"],  0]])
+    units["DLS_2"].add_connections([[units["Cue"],  0], [units["MC_2"], 1]])
     units["STNdl_1"].add_connections([[units["MC_1"], 1]])
     units["STNdl_2"].add_connections([[units["MC_2"], 1]])
     units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
@@ -174,7 +175,7 @@ def build_model():
     units["MGV_1"].add_connections([[units["GPi_1"], -1.5], [units["MGV_1"], 0.8], [units["MGV_2"], -0.8]])
     units["MGV_2"].add_connections([[units["GPi_2"], -1.5], [units["MGV_1"], -0.8], [units["MGV_2"], 0.8]])
     units["MC_1"].add_connections([[units["MGV_1"], 1]]); units["MC_2"].add_connections([[units["MGV_2"], 1]])
-    units["MC_1"].add_connections([[units["PL_1"], 0.2]]); units["MC_2"].add_connections([[units["PL_2"], 0.2]])
+    units["MC_1"].add_connections([[units["PL_1"], 1]]); units["MC_2"].add_connections([[units["PL_2"], 1]])
 
     # Add the names to the class objects
     for name,unit in units.items():
