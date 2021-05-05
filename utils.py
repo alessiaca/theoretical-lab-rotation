@@ -38,11 +38,14 @@ def reset_units(units):
         unit.trace = 0
         unit.not_crossed_trace = True
         unit.activity_history = [[0, 0, 0], [0, 0, 0]]
+        # Reset the weight history of the connections (but not the weight itsef)
+        for connection in unit.connections:
+            connection.weight_history = []
 
 
 ############################################################################################
 # Simulation of the model
-def simulation(units, t, dt, binary_switches=None):
+def simulation(units, t, dt=1, binary_switches=None):
     """binary_switches: Dictionary with names of units and times of switches (starting with 0)"""
     for i_t in t:
         for i_u, (name, unit) in enumerate(units.items()):

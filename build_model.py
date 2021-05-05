@@ -24,7 +24,7 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.8  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.0001  # Learning rate (between cue and DLS)
+        self.eta = 0.0003  # Learning rate (between cue and DLS)
         self.thres_DLS = 0.7
         self.thres_Cue = 0.2
         self.thres_CeA = 1
@@ -130,8 +130,8 @@ class Unit:
 
 
 ###########################################################################################################
-def build_model(learning=False, trauma=False, learning_type=None):
-    """"""
+def build_model():
+    """Default state of the model: Before trauma and before learning (but with plastic connections)"""
 
     # Initialize the units of the model
     units = {}
@@ -157,13 +157,14 @@ def build_model(learning=False, trauma=False, learning_type=None):
 
     # Connect the units
 
+    # Inhibitory input from the escape action to the cue
     units["Cue"].add_connections([[units["MC_2"], -1]])
+
     units["CeA"].add_connections([[units["BLA_2"], 2]])
 
     # Goal loop
     units["BLA_1"].add_connections([[units["Cue"], 2], [units["BLA_2"], -20]])
-    if trauma:
-        units["BLA_2"].add_connections([[units["Cue"], 2]])
+    units["BLA_2"].add_connections([[units["Cue"], 0]])
     units["NAc_1"].add_connections([[units["BLA_1"], 2], [units["PL_1"], 1]])
     units["NAc_2"].add_connections([[units["BLA_2"], 2], [units["PL_2"], 1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
@@ -176,16 +177,8 @@ def build_model(learning=False, trauma=False, learning_type=None):
     units["PL_1"].add_connections([[units["MC_1"], 0.2]]); units["PL_2"].add_connections([[units["MC_2"], 0.2]])
 
     # Action loop
-    if learning:
-        if learning_type == "approach":
-            units["DLS_1"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
-            units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"],  0]])
-        elif learning_type == "escape":
-            units["DLS_1"].add_connections([[units["Cue"], 1], [units["MC_1"], 1], [units["CeA"], 0]])
-            units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"], 0]])
-    else:
-        units["DLS_1"].add_connections([[units["Cue"], 1], [units["MC_1"], 1], [units["CeA"], 0]])
-        units["DLS_2"].add_connections([[units["Cue"], 1], [units["MC_2"], 1], [units["CeA"], 0]])
+    units["DLS_1"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
+    units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"],  0]])
     units["STNdl_1"].add_connections([[units["MC_1"], 1]])
     units["STNdl_2"].add_connections([[units["MC_2"], 1]])
     units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
