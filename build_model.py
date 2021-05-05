@@ -24,12 +24,12 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.8  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.00005  # Learning rate (between cue and DLS)
-        self.thres_DLS = 0.5
-        self.thres_Cue = 0.3
+        self.eta = 0.0001  # Learning rate (between cue and DLS)
+        self.thres_DLS = 0.7
+        self.thres_Cue = 0.2
         self.thres_CeA = 1
         self.not_crossed_trace= True
-        self.max_weight = 2
+        self.max_weight = 1
         self.activity_history = [[0, 0, 0], [0, 0, 0]]  # Initialize an array that stores the potential and firing rate at each point in time
 
 
@@ -56,6 +56,8 @@ class Unit:
 
         # Update the potential
         potential_change = (-self.potential + self.input()) / self.tau
+        if self.name == "Cue":
+            potential_change = neg_sat(self.input(),-0.7,1) / self.tau
         self.potential = self.potential + potential_change * dt
 
         # Update the trace - only for the Cue
@@ -93,6 +95,9 @@ class Unit:
     def update_firing_rate(self):
         if self.type != "binary":
             self.firing_rate = pos_sat(np.tanh(self.sigma * (self.potential - self.thres)))
+        else: # Switch binary unit off if potential (accumulated inhibitory input) is too low
+            if self.potential < -0.7:
+                self.firing_rate = 0
 
 
     #######################################################################################################
@@ -125,11 +130,12 @@ class Unit:
 
 
 ###########################################################################################################
-def build_model():
+def build_model(learning=False, trauma=False, learning_type=None):
+    """"""
 
     # Initialize the units of the model
     units = {}
-    units["Cue"] = Unit("binary")
+    units["Cue"] = Unit("binary", tau=10000)
 
     # Amygdala
     units["BLA_1"] = Unit("leaky"); units["BLA_2"] = Unit("leaky")
@@ -149,11 +155,15 @@ def build_model():
     units["MGV_1"] = Unit("leaky", noise_coeff=2); units["MGV_2"] = Unit("leaky", noise_coeff=2)
     units["MC_1"] = Unit("leaky", tau=1000, sigma=2, thres=0); units["MC_2"] = Unit("leaky", tau=1000, sigma=2, thres=0)
 
-    # Connect the units - fixed at maximum connection weight
+    # Connect the units
+
+    units["Cue"].add_connections([[units["MC_2"], -1]])
+    units["CeA"].add_connections([[units["BLA_2"], 2]])
 
     # Goal loop
     units["BLA_1"].add_connections([[units["Cue"], 2], [units["BLA_2"], -20]])
-    units["BLA_2"].add_connections([[units["Cue"], 0]])
+    if trauma:
+        units["BLA_2"].add_connections([[units["Cue"], 2]])
     units["NAc_1"].add_connections([[units["BLA_1"], 2], [units["PL_1"], 1]])
     units["NAc_2"].add_connections([[units["BLA_2"], 2], [units["PL_2"], 1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
@@ -166,8 +176,16 @@ def build_model():
     units["PL_1"].add_connections([[units["MC_1"], 0.2]]); units["PL_2"].add_connections([[units["MC_2"], 0.2]])
 
     # Action loop
-    units["DLS_1"].add_connections([[units["Cue"],  0], [units["MC_1"], 1], [units["CeA"],  0]])
-    units["DLS_2"].add_connections([[units["Cue"],  0], [units["MC_2"], 1]])
+    if learning:
+        if learning_type == "approach":
+            units["DLS_1"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
+            units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"],  0]])
+        elif learning_type == "escape":
+            units["DLS_1"].add_connections([[units["Cue"], 1], [units["MC_1"], 1], [units["CeA"], 0]])
+            units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"], 0]])
+    else:
+        units["DLS_1"].add_connections([[units["Cue"], 1], [units["MC_1"], 1], [units["CeA"], 0]])
+        units["DLS_2"].add_connections([[units["Cue"], 1], [units["MC_2"], 1], [units["CeA"], 0]])
     units["STNdl_1"].add_connections([[units["MC_1"], 1]])
     units["STNdl_2"].add_connections([[units["MC_2"], 1]])
     units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])

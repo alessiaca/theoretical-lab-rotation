@@ -13,9 +13,14 @@ def pos_sat(x):
     return np.max([x,0])
 
 
-def neg_sat(x):
-    """"Returns 0 if x >= 0, else -x"""
-    return np.max([x*-1,0])
+def neg_sat(x,thres=0,sign=-1):
+    """"Returns 0 if x*sign >= thres, else -x"""
+    if x <= thres:
+        return x*sign
+    else:
+        return 0
+
+
 
 ############################################################################################
 # Instrumental training (association between US and CS)
