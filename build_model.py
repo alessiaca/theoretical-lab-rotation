@@ -8,7 +8,7 @@ class Unit:
 
     #######################################################################################################
     # Initialize the unit
-    def __init__(self, type, name=None, tau=300, thres=0, sigma=1,noise_coeff=0):
+    def __init__(self, type, name=None, tau=300, thres=0, sigma=1, noise_coeff=0):
         self.type = type  # Define the type of the unit: "leaky" or "binary"
         self.name = name
         self.connections = []  # Initialize an empty list of input units
@@ -22,14 +22,14 @@ class Unit:
         self.tau_noise = 80
         self.trace = 0
         self.tau_trace = 20000
-        self.thres_trace = 0.8  # Threshold when amplification coefficient is added
+        self.thres_trace = 0.6  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.0003  # Learning rate (between cue and DLS)
-        self.thres_DLS = 0.7
-        self.thres_Cue = 0.2
-        self.thres_CeA = 1
+        self.eta = 0.03  # Learning rate (between cue and DLS)
+        self.thres_NAc = 0.7
+        self.thres_BLA = 0.2
+        self.thres_BLA_trace = 0.4
         self.not_crossed_trace= True
-        self.max_weight = 1
+        self.max_weight = 2
         self.activity_history = [[0, 0, 0], [0, 0, 0]]  # Initialize an array that stores the potential and firing rate at each point in time
 
 
@@ -56,13 +56,11 @@ class Unit:
 
         # Update the potential
         potential_change = (-self.potential + self.input()) / self.tau
-        if self.name == "Cue":
-            potential_change = neg_sat(self.input(),-0.7,1) / self.tau
         self.potential = self.potential + potential_change * dt
 
         # Update the trace - only for the Cue
         # Add the amplification coefficient only once when the activation threshold is passed (for the first time)
-        if self.name == "Cue":
+        if self.name == "BLA":
             if self.not_crossed_trace and self.firing_rate > self.thres_trace and \
                     np.all(self.firing_rate > np.array(self.activity_history)[:-1, 1]):
                 trace_change = (-self.trace + self.firing_rate * self.alpha) / self.tau_trace
@@ -72,7 +70,7 @@ class Unit:
             self.trace = self.trace + trace_change * dt
 
         # Update the noise - only for the thalamus
-        if self.name[:2] in ["MG", "DM"]:
+        if self.name[:2] == "DM":
             noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.tau_noise
             self.noise = self.noise + noise_change * dt
 
@@ -81,13 +79,13 @@ class Unit:
             # Update only plastic connections
             if connection.type == "plastic":
                 # Get the CeA unit which controls learning
-                CeA_unit = [connection.input_unit for connection in self.connections if connection.input_unit.name == "CeA"][0]
                 # Compute the weight update
-                weight_change = self.eta * pos_sat(self.firing_rate - self.thres_DLS) * \
-                                pos_sat(connection.input_unit.activity_history[-1][2] - self.thres_Cue) * \
-                                neg_sat(CeA_unit.firing_rate - self.thres_CeA) * (self.max_weight - connection.weight)
+                weight_change = self.eta * pos_sat(self.firing_rate - self.thres_NAc) * \
+                                pos_sat(connection.input_unit.trace - self.thres_BLA_trace) * \
+                                neg_sat(connection.input_unit.firing_rate - self.thres_BLA) * \
+                                (self.max_weight - connection.weight)
                 connection.weight = connection.weight + weight_change * dt
-                # Save the connection weight in an array
+                # Save the connection weight in an array"""
                 connection.weight_history.append(connection.weight)
 
     #######################################################################################################
@@ -95,8 +93,9 @@ class Unit:
     def update_firing_rate(self):
         if self.type != "binary":
             self.firing_rate = pos_sat(np.tanh(self.sigma * (self.potential - self.thres)))
-        else: # Switch binary unit off if potential (accumulated inhibitory input) is too low
-            if self.potential < -0.7:
+        else: # Switch binary unit off if escape action was chosen (firing rate > 0.8)
+            PL_2_unit = [connection.input_unit for connection in self.connections if connection.input_unit.name == "PL_2"][0]
+            if PL_2_unit.firing_rate > 0.8:
                 self.firing_rate = 0
 
 
@@ -135,58 +134,29 @@ def build_model():
 
     # Initialize the units of the model
     units = {}
-    units["Cue"] = Unit("binary", tau=10000)
 
-    # Amygdala
-    units["BLA_1"] = Unit("leaky"); units["BLA_2"] = Unit("leaky")
-    units["CeA"] = Unit("leaky", sigma=5, thres=0.5)
-
-    # Goal loop
+    units["hippocampus"] = Unit("binary")
+    units["BLA"] = Unit("leaky")
     units["NAc_1"] = Unit("leaky"); units["NAc_2"] = Unit("leaky")
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
-    units["DM_1"] = Unit("leaky", noise_coeff=14); units["DM_2"] = Unit("leaky", noise_coeff=14)
-    units["PL_1"] = Unit("leaky", tau=1000, sigma=2, thres=0); units["PL_2"] = Unit("leaky", tau=1000, sigma=2, thres=0)
-
-    # Action loop
-    units["DLS_1"] = Unit("leaky"); units["DLS_2"] = Unit("leaky")
-    units["STNdl_1"] = Unit("leaky"); units["STNdl_2"] = Unit("leaky")
-    units["GPi_1"] = Unit("leaky"); units["GPi_2"] = Unit("leaky")
-    units["MGV_1"] = Unit("leaky", noise_coeff=2); units["MGV_2"] = Unit("leaky", noise_coeff=2)
-    units["MC_1"] = Unit("leaky", tau=1000, sigma=2, thres=0); units["MC_2"] = Unit("leaky", tau=1000, sigma=2, thres=0)
+    units["DM_1"] = Unit("leaky", noise_coeff=12); units["DM_2"] = Unit("leaky", noise_coeff=12)
+    units["PL_1"] = Unit("leaky", tau=1000, sigma=5, thres=0)
+    units["PL_2"] = Unit("leaky", tau=1000, sigma=5, thres=0)
 
     # Connect the units
-
-    # Inhibitory input from the escape action to the cue
-    units["Cue"].add_connections([[units["MC_2"], -1]])
-
-    units["CeA"].add_connections([[units["BLA_2"], 2]])
-
-    # Goal loop
-    units["BLA_1"].add_connections([[units["Cue"], 2], [units["BLA_2"], -20]])
-    units["BLA_2"].add_connections([[units["Cue"], 0]])
-    units["NAc_1"].add_connections([[units["BLA_1"], 2], [units["PL_1"], 1]])
-    units["NAc_2"].add_connections([[units["BLA_2"], 2], [units["PL_2"], 1]])
+    units["hippocampus"].add_connections([[units["PL_2"], 0]])
+    units["BLA"].add_connections([[units["hippocampus"],1]])
+    units["NAc_1"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_1"], 0.5]])
+    units["NAc_2"].add_connections([[units["BLA"], 2, "plastic"], [units["PL_2"], 0.5]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
-    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
-    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 2], [units["STNv_2"], 2]])
-    units["DM_1"].add_connections([[units["SNpr_1"], -1.5], [units["DM_2"], -0.8], [units["DM_1"], 0.8]])
-    units["DM_2"].add_connections([[units["SNpr_2"], -1.5], [units["DM_1"], -0.8], [units["DM_2"], 0.8]])
-    units["PL_1"].add_connections([[units["DM_1"], 1]]); units["PL_2"].add_connections([[units["DM_2"], 1]])
-    units["PL_1"].add_connections([[units["MC_1"], 0.2]]); units["PL_2"].add_connections([[units["MC_2"], 0.2]])
-
-    # Action loop
-    units["DLS_1"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_1"], 1], [units["CeA"],  0]])
-    units["DLS_2"].add_connections([[units["Cue"], 0, "plastic"], [units["MC_2"], 1], [units["CeA"],  0]])
-    units["STNdl_1"].add_connections([[units["MC_1"], 1]])
-    units["STNdl_2"].add_connections([[units["MC_2"], 1]])
-    units["GPi_1"].add_connections([[units["DLS_1"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
-    units["GPi_2"].add_connections([[units["DLS_2"], -3], [units["STNdl_1"], 2], [units["STNdl_2"], 2]])
-    units["MGV_1"].add_connections([[units["GPi_1"], -1.5], [units["MGV_1"], 0.8], [units["MGV_2"], -0.8]])
-    units["MGV_2"].add_connections([[units["GPi_2"], -1.5], [units["MGV_1"], -0.8], [units["MGV_2"], 0.8]])
-    units["MC_1"].add_connections([[units["MGV_1"], 1]]); units["MC_2"].add_connections([[units["MGV_2"], 1]])
-    units["MC_1"].add_connections([[units["PL_1"], 1]]); units["MC_2"].add_connections([[units["PL_2"], 1]])
+    units["SNpr_1"].add_connections([[units["NAc_1"], -1], [units["STNv_1"], 1.5], [units["STNv_2"], 1.5]])
+    units["SNpr_2"].add_connections([[units["NAc_2"], -1], [units["STNv_1"], 1.5], [units["STNv_2"], 1.5]])
+    units["DM_1"].add_connections([[units["SNpr_1"], -2], [units["DM_2"], -1.2], [units["DM_1"], 1]])
+    units["DM_2"].add_connections([[units["SNpr_2"], -2], [units["DM_1"], -1.2], [units["DM_2"], 1]])
+    units["PL_1"].add_connections([[units["DM_1"], 1]])
+    units["PL_2"].add_connections([[units["DM_2"], 1]])
 
     # Add the names to the class objects
     for name,unit in units.items():
