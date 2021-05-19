@@ -12,8 +12,8 @@ units = build_model()
 #interactive_simulation(units,200)
 
 # Simulate the behaviour of the model in the different stages
-stages = ["before trauma", "after trauma", "after trauma and EMDR"]
-#stages = ["after trauma"]
+stages = ["before trauma", "after trauma"]
+stages = ["after trauma"]
 
 # Decide whether to plot the activity after each trial (for visual inspection)
 plot = False

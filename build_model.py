@@ -24,12 +24,12 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.6  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.03  # Learning rate (between cue and DLS)
+        self.eta = 3  # Learning rate (between cue and DLS)
         self.thres_NAc = 0.7
-        self.thres_BLA = 0.2
+        self.thres_BLA_offset = 0.0001
         self.thres_BLA_trace = 0.4
         self.not_crossed_trace= True
-        self.max_weight = 2
+        self.max_weight = 3
         self.activity_history = [[0, 0, 0], [0, 0, 0]]  # Initialize an array that stores the potential and firing rate at each point in time
 
 
@@ -71,7 +71,7 @@ class Unit:
 
         # Update the noise - only for the thalamus
         if self.name[:2] == "DM":
-            noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.5,0.5)) / self.tau_noise
+            noise_change = (-self.noise + self.noise_coeff * np.random.uniform(-0.3, 0.3)) / self.tau_noise
             self.noise = self.noise + noise_change * dt
 
         # Update the weight
@@ -81,9 +81,12 @@ class Unit:
                 # Get the CeA unit which controls learning
                 # Compute the weight update
                 weight_change = self.eta * pos_sat(self.firing_rate - self.thres_NAc) * \
-                                pos_sat(connection.input_unit.trace - self.thres_BLA_trace) * \
-                                neg_sat(connection.input_unit.firing_rate - self.thres_BLA) * \
+                                neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset) * \
                                 (self.max_weight - connection.weight)
+                if weight_change > 0:
+                    print(pos_sat(self.firing_rate - self.thres_NAc))
+                    print(neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset))
+                    print((self.max_weight - connection.weight))
                 connection.weight = connection.weight + weight_change * dt
                 # Save the connection weight in an array"""
                 connection.weight_history.append(connection.weight)
@@ -141,20 +144,20 @@ def build_model():
     units["STNv_1"] = Unit("leaky"); units["STNv_2"] = Unit("leaky")
     units["SNpr_1"] = Unit("leaky"); units["SNpr_2"] = Unit("leaky")
     units["DM_1"] = Unit("leaky", noise_coeff=12); units["DM_2"] = Unit("leaky", noise_coeff=12)
-    units["PL_1"] = Unit("leaky", tau=1000, sigma=5, thres=0)
-    units["PL_2"] = Unit("leaky", tau=1000, sigma=5, thres=0)
+    units["PL_1"] = Unit("leaky", tau=1000, sigma=4, thres=0)
+    units["PL_2"] = Unit("leaky", tau=1000, sigma=4, thres=0)
 
     # Connect the units
     units["hippocampus"].add_connections([[units["PL_2"], 0]])
-    units["BLA"].add_connections([[units["hippocampus"],1]])
-    units["NAc_1"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_1"], 0.5]])
-    units["NAc_2"].add_connections([[units["BLA"], 2, "plastic"], [units["PL_2"], 0.5]])
+    units["BLA"].add_connections([[units["hippocampus"], 1]])
+    units["NAc_1"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_1"], 1], [units["NAc_2"], -0.1]])
+    units["NAc_2"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_2"], 1], [units["NAc_1"], -0.1]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
-    units["SNpr_1"].add_connections([[units["NAc_1"], -1], [units["STNv_1"], 1.5], [units["STNv_2"], 1.5]])
-    units["SNpr_2"].add_connections([[units["NAc_2"], -1], [units["STNv_1"], 1.5], [units["STNv_2"], 1.5]])
-    units["DM_1"].add_connections([[units["SNpr_1"], -2], [units["DM_2"], -1.2], [units["DM_1"], 1]])
-    units["DM_2"].add_connections([[units["SNpr_2"], -2], [units["DM_1"], -1.2], [units["DM_2"], 1]])
+    units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 3], [units["STNv_2"], 3]])
+    units["SNpr_2"].add_connections([[units["NAc_2"], -3], [units["STNv_1"], 3], [units["STNv_2"], 3]])
+    units["DM_1"].add_connections([[units["SNpr_1"], -2.4], [units["DM_2"], -0.8], [units["DM_1"], 1.3]])
+    units["DM_2"].add_connections([[units["SNpr_2"], -2.4], [units["DM_1"], -0.8], [units["DM_2"], 1.3]])
     units["PL_1"].add_connections([[units["DM_1"], 1]])
     units["PL_2"].add_connections([[units["DM_2"], 1]])
 
