@@ -23,7 +23,7 @@ plot_units_firing_rate = ["NAc_1","NAc_2", "PL_1", "PL_2", "DM_1", "DM_2", "BLA"
 # Initialize the parameters needed for the simulation
 t_max = 10000  # Length of a trial
 t = np.arange(0, t_max)
-n_stim = 40  # Number of simulations per stage
+n_stim = 50  # Number of simulations per stage
 
 for stage in stages:
 

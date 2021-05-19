@@ -24,8 +24,8 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.6  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 3  # Learning rate (between cue and DLS)
-        self.thres_NAc = 0.7
+        self.eta = 0.1  # Learning rate (between cue and DLS)
+        self.thres_NAc = 0.6
         self.thres_BLA_offset = 0.0001
         self.thres_BLA_trace = 0.4
         self.not_crossed_trace= True
@@ -83,7 +83,7 @@ class Unit:
                 weight_change = self.eta * pos_sat(self.firing_rate - self.thres_NAc) * \
                                 neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset) * \
                                 (self.max_weight - connection.weight)
-                if weight_change > 0:
+                if False:#weight_change > 0:
                     print(pos_sat(self.firing_rate - self.thres_NAc))
                     print(neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset))
                     print((self.max_weight - connection.weight))
