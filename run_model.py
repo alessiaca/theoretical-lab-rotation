@@ -13,7 +13,7 @@ units = build_model()
 
 # Simulate the behaviour of the model in the different stages
 stages = ["before trauma", "after trauma"]
-stages = ["after trauma"]
+#stages = ["after trauma"]
 
 # Decide whether to plot the activity after each trial (for visual inspection)
 plot = False
@@ -23,7 +23,7 @@ plot_units_firing_rate = ["NAc_1","NAc_2", "PL_1", "PL_2", "DM_1", "DM_2", "BLA"
 # Initialize the parameters needed for the simulation
 t_max = 10000  # Length of a trial
 t = np.arange(0, t_max)
-n_stim = 50  # Number of simulations per stage
+n_stim = 100  # Number of simulations per stage
 
 for stage in stages:
 
@@ -86,9 +86,11 @@ for stage in stages:
     colors = plt.cm.Reds(np.linspace(0.2, 0.5, 3))
     plt.figure()
     plt.subplot(1, 1, 1)
-    plt.scatter(range(n_stim), weights[:, 0], c=colors[-1], label="Approach")
-    plt.scatter(range(n_stim), weights[:, 1], c=colors[-2], label="Escape")
-    plt.ylabel("$\Delta w_{DLS,Cue}$", fontSize=12)
+    x1 = np.where(one_won)
+    plt.scatter(x1, weights[x1, 0], c=colors[-1], label="Approach")
+    x2 = np.where(two_won)
+    plt.scatter(x2, weights[x2, 1], c=colors[-2], label="Escape")
+    plt.ylabel("$\Delta w_{NAc, Amygdala}$", fontSize=12)
     plt.xlabel("# Trial", fontSize=12)
     plt.xticks(fontsize=10)
     plt.yticks(fontsize=10)

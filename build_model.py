@@ -24,12 +24,12 @@ class Unit:
         self.tau_trace = 20000
         self.thres_trace = 0.6  # Threshold when amplification coefficient is added
         self.alpha = 20000
-        self.eta = 0.1  # Learning rate (between cue and DLS)
+        self.eta = 0.3  # Learning rate (between cue and DLS)
         self.thres_NAc = 0.6
         self.thres_BLA_offset = 0.0001
         self.thres_BLA_trace = 0.4
         self.not_crossed_trace= True
-        self.max_weight = 3
+        self.max_weight = 1
         self.activity_history = [[0, 0, 0], [0, 0, 0]]  # Initialize an array that stores the potential and firing rate at each point in time
 
 
@@ -83,10 +83,6 @@ class Unit:
                 weight_change = self.eta * pos_sat(self.firing_rate - self.thres_NAc) * \
                                 neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset) * \
                                 (self.max_weight - connection.weight)
-                if False:#weight_change > 0:
-                    print(pos_sat(self.firing_rate - self.thres_NAc))
-                    print(neg_sat(np.diff(np.array(connection.input_unit.activity_history[-2:])[:,1]) + self.thres_BLA_offset))
-                    print((self.max_weight - connection.weight))
                 connection.weight = connection.weight + weight_change * dt
                 # Save the connection weight in an array"""
                 connection.weight_history.append(connection.weight)
@@ -150,8 +146,8 @@ def build_model():
     # Connect the units
     units["hippocampus"].add_connections([[units["PL_2"], 0]])
     units["BLA"].add_connections([[units["hippocampus"], 1]])
-    units["NAc_1"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_1"], 1], [units["NAc_2"], -0.1]])
-    units["NAc_2"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_2"], 1], [units["NAc_1"], -0.1]])
+    units["NAc_1"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_1"], 1], [units["NAc_2"], -0.5]])
+    units["NAc_2"].add_connections([[units["BLA"], 0, "plastic"], [units["PL_2"], 1], [units["NAc_1"], -0.5]])
     units["STNv_1"].add_connections([[units["PL_1"], 1]])
     units["STNv_2"].add_connections([[units["PL_2"], 1]])
     units["SNpr_1"].add_connections([[units["NAc_1"], -3], [units["STNv_1"], 3], [units["STNv_2"], 3]])
