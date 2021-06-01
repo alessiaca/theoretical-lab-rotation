@@ -23,7 +23,7 @@ plot_units_firing_rate = ["NAc_1","NAc_2", "PL_1", "PL_2", "DM_1", "DM_2", "BLA"
 # Initialize the parameters needed for the simulation
 t_max = 10000  # Length of a trial
 t = np.arange(0, t_max)
-n_stim = 100  # Number of simulations per stage
+n_stim = 40  # Number of simulations per stage
 
 for stage in stages:
 
@@ -62,9 +62,6 @@ for stage in stages:
             plt.subplot(1, 2, 1)
             for name in plot_units_firing_rate:
                 plt.plot(np.array(units[name].activity_history)[:,1], label=name)
-                # For the Cue plot also the potential and the trace
-                if name == "BLA":
-                    plt.plot(np.array(units[name].activity_history)[:, 2], label="BLA Trace")
             plt.legend()
             # Plot the weights
             plt.subplot(1, 2, 2)

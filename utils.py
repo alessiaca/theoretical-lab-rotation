@@ -35,9 +35,8 @@ def reset_units(units):
         unit.potential = 0
         unit.firing_rate = 0
         unit.noise = 0
-        unit.trace = 0
         unit.not_crossed_trace = True
-        unit.activity_history = [[0, 0, 0], [0, 0, 0]]
+        unit.activity_history = [[0, 0], [0, 0]]
         # Reset the weight history of the connections (but not the weight itsef)
         for connection in unit.connections:
             connection.weight_history = []
